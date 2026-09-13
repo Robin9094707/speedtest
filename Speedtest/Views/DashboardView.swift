@@ -34,7 +34,7 @@ struct DashboardView: View {
                                             color: engine.phase == .upload ? Palette.upload : accent,
                                             subtitle: engine.phase == .complete ? "Download-Ergebnis" : engine.phase.rawValue)
                                 .frame(height: 300)
-                                .animation(animate ? .easeOut(duration: 0.3) : nil, value: engine.liveSpeed)
+                                .animation(animate ? .linear(duration: 0.22) : nil, value: engine.liveSpeed)
                             if engine.isRunning {
                                 ProgressView(value: engine.progress).tint(engine.phase == .upload ? Palette.upload : accent)
                                     .padding(.horizontal, 24).padding(.bottom, 20)

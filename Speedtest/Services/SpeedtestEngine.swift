@@ -229,11 +229,15 @@ final class SpeedtestEngine: ObservableObject {
     @Published var errorMessage: String?
     private var task: Task<Void, Never>?
     private var runID = UUID()
+    // Display-only smoothing: recorded samples and final results stay untouched.
+    private var displayWindow: [(end: Double, duration: Double, speed: Double)] = []
+    private var lastDisplayTime = 0.0
     var isRunning: Bool { phase.running }
 
     func start(store: AppStore, network: NetworkIdentity, location: LocationService) {
         guard !isRunning else { return }
         let config = store.settings
+        resetDisplay()
         phase = .latency; liveSpeed = 0; progress = 0; download = nil; upload = nil
         ping = nil; jitter = nil; transferred = 0; samples = []; result = nil; awards = []; errorMessage = nil
         let id = UUID(); runID = id
@@ -254,6 +258,7 @@ final class SpeedtestEngine: ObservableObject {
                 }.run()
                 try Task.checkCancellation()
                 download = down.mbps; phase = .upload; samples = []; liveSpeed = 0
+                resetDisplay()
                 let up = try await TransferMeter(upload: true, seconds: config.mode.seconds,
                     streams: config.connections, budget: budget, cellularAllowed: network.kind == .cellular) { [weak self] update in
                     Task { @MainActor in self?.receive(update, id: id, phase: .upload, duration: config.mode.seconds, priorBytes: down.bytes) }
@@ -289,10 +294,35 @@ final class SpeedtestEngine: ObservableObject {
     }
     private func receive(_ update: TransferProgress, id: UUID, phase expected: TestPhase, duration: Double, priorBytes: Int64) {
         guard id == runID, phase == expected else { return }
-        liveSpeed = update.mbps
+        smoothDisplay(update)
         transferred = priorBytes + update.bytes
         samples.append(SpeedSample(seconds: update.elapsed, mbps: update.mbps))
         progress = expected == .download ? 0.1 + 0.45 * min(1, update.elapsed / duration) : 0.55 + 0.45 * min(1, update.elapsed / duration)
+    }
+    private func resetDisplay() {
+        displayWindow.removeAll(keepingCapacity: true)
+        lastDisplayTime = 0
+    }
+    private func smoothDisplay(_ update: TransferProgress) {
+        let interval = update.elapsed - lastDisplayTime
+        guard interval > 0, update.mbps.isFinite else { return }
+        lastDisplayTime = update.elapsed
+        displayWindow.append((end: update.elapsed, duration: interval, speed: max(0, update.mbps)))
+        let windowStart = max(0, update.elapsed - 1.4)
+        displayWindow.removeAll { $0.end <= windowStart }
+        var weightedSpeed = 0.0
+        var weight = 0.0
+        for sample in displayWindow {
+            let overlap = sample.end - max(windowStart, sample.end - sample.duration)
+            weightedSpeed += sample.speed * overlap
+            weight += overlap
+        }
+        guard weight > 0 else { return }
+        // The rolling window absorbs bursty upload acknowledgments; this second
+        // stage gently follows sustained changes without spring overshoot.
+        let target = weightedSpeed / weight
+        let response = 1 - exp(-interval / 0.55)
+        liveSpeed += (target - liveSpeed) * response
     }
     private func measureLatency(cellularAllowed: Bool) async throws -> [Double] {
         let config = URLSessionConfiguration.ephemeral

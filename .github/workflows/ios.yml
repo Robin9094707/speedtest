@@ -32,6 +32,8 @@ jobs:
           python3 scripts/select_simulator.py >> "$GITHUB_ENV"
 
       - name: Unit-Tests und iPhone-Oberfläche prüfen
+        id: tests
+        if: ${{ !contains(github.event.head_commit.message, '[build only]') }}
         run: |
           set -euo pipefail
           xcodebuild test -quiet \
@@ -57,6 +59,8 @@ jobs:
             2>&1 | tee build/archive.log
 
       - name: IPA paketieren und prüfen
+        env:
+          BUILD_ONLY: ${{ contains(github.event.head_commit.message, '[build only]') }}
         run: |
           set -euo pipefail
           mkdir -p build/package/Payload build/artifacts
@@ -64,8 +68,10 @@ jobs:
           cd build/package
           zip -qry ../artifacts/RJ-Speedtest.ipa Payload
           cd ../..
-          python3 scripts/validate_ipa.py build/artifacts/RJ-Speedtest.ipa
-          lipo -info build/package/Payload/Speedtest.app/Speedtest
+          if [ "$BUILD_ONLY" != "true" ]; then
+            python3 scripts/validate_ipa.py build/artifacts/RJ-Speedtest.ipa
+            lipo -info build/package/Payload/Speedtest.app/Speedtest
+          fi
           cp INSTALLATION.md build/artifacts/INSTALLATION.md
           cp Speedtest/Resources/Speedtest.entitlements build/artifacts/Speedtest.entitlements
           cd build/artifacts
@@ -103,12 +109,14 @@ jobs:
         if: success()
         env:
           IPA_URL: ${{ steps.ipa.outputs.artifact-url }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
         run: |
           python3 - <<'PY'
           import os
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
               f.write('## RJ Speedtest ist gebaut\n\n')
               f.write(f"[IPA herunterladen]({os.environ['IPA_URL']})\n\n")
-              f.write('Native ARM64-App ab iOS 17. Unit- und UI-Tests bestanden.\n\n')
+              f.write('Native ARM64-App ab iOS 17. ')
+              f.write('Unit- und UI-Tests bestanden.\n\n' if os.environ['TEST_OUTCOME'] == 'success' else 'Nur gebaut; Tests auf Wunsch übersprungen.\n\n')
               f.write('**Die IPA ist unsigniert.** Vor der Installation mit einem eigenen Apple-Profil signieren, z. B. per Sideloading. Hinweise stehen in INSTALLATION.md.\n')
           PY
