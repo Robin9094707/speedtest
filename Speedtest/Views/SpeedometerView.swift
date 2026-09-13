@@ -36,7 +36,7 @@ struct SpeedometerView: View, Animatable {
                         context.stroke(tick, with: .color(.secondary.opacity(major ? 0.8 : 0.35)), lineWidth: major ? 2 : 1)
                         if major {
                             let number = unit.convert(maximum * Double(index) / 50)
-                            let text = Text(number.formatted(.number.precision(.fractionLength(0))))
+                            let text = Text(number.formatted(.number.locale(Locale(identifier: "de_DE")).precision(.fractionLength(0))))
                                 .font(.system(size: 11, weight: .medium, design: .rounded)).foregroundStyle(.secondary)
                             context.draw(text, at: point(center, inner - 17, angle))
                         }

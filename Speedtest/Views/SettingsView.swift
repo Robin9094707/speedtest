@@ -30,6 +30,9 @@ struct SettingsView: View {
 
                 Section("Dein Look") {
                     Picker("Einheit", selection: $store.settings.unit) { ForEach(SpeedUnit.allCases) { Text($0.rawValue).tag($0) } }
+                    Picker("Tacho-Skala", selection: $store.settings.gaugeScale) {
+                        ForEach(GaugeScale.allCases) { Text($0.label).tag($0) }
+                    }.disabled(engine.isRunning)
                     Picker("Erscheinungsbild", selection: $store.settings.appearance) {
                         ForEach(["System", "Dunkel", "Hell"], id: \.self) { Text($0).tag($0) }
                     }
@@ -38,6 +41,19 @@ struct SettingsView: View {
                     }
                     Toggle("Animationen", isOn: $store.settings.animations)
                     Toggle("Haptisches Feedback", isOn: $store.settings.haptics)
+                }
+
+                Section {
+                    Toggle("Speedtest fühlen", isOn: $store.settings.liveHaptics)
+                        .disabled(!store.settings.haptics)
+                    Slider(value: $store.settings.hapticStrength, in: 0.2...1, step: 0.05) {
+                        Text("Haptik-Stärke")
+                    } minimumValueLabel: { Image(systemName: "waveform.path") }
+                      maximumValueLabel: { Image(systemName: "waveform") }
+                        .disabled(!store.settings.haptics || !store.settings.liveHaptics)
+                    LabeledContent("Stärke", value: "\(Int((store.settings.hapticStrength * 100).rounded())) %")
+                } header: { Text("Live-Haptik") } footer: {
+                    Text("Je näher die Geschwindigkeit am Skalenende liegt, desto kräftiger und schneller pulsiert dein iPhone. Oberhalb der Skala bleibt die Haptik am Maximum; die Zahl zeigt weiterhin die echte Geschwindigkeit. Die Wirkung hängt vom Gerät und den iOS-Haptikeinstellungen ab.")
                 }
 
                 Section {

@@ -9,13 +9,33 @@ enum TestPhase: String {
 
 enum MeasurementError: LocalizedError {
     case server(Int), noData, networkChanged, background
+    case retryLater(Int, Double), unexpectedResponse, retryBudget
     var errorDescription: String? {
         switch self {
-        case .server(let status): return "Der Messserver antwortet mit HTTP \(status). Bitte später erneut versuchen."
+        case .server(let status): return "Der Messserver antwortet mit HTTP \(status). Bitte etwas warten und erneut versuchen."
+        case .retryLater(let status, let delay): return "Der Messserver meldet HTTP \(status). Frühestens in \(ceil(delay).formatted(.number.precision(.fractionLength(0)))) Sekunden erneut versuchen."
+        case .unexpectedResponse: return "Die Antwort enthält keine gültigen Testdaten. Prüfe eine mögliche WLAN-Anmeldeseite, einen VPN oder Netzwerkfilter."
+        case .retryBudget: return "Für einen neuen Messversuch reicht das verbleibende Datenlimit nicht. Wähle ein höheres Limit oder starte später erneut."
         case .noData: return "Zu wenige bestätigte Daten für eine zuverlässige Messung. Versuche einen längeren Test."
         case .networkChanged: return "Die Netzwerkverbindung hat sich geändert. Starte im gewünschten Netz erneut."
         case .background: return "Der Test wurde beim Verlassen der App beendet. Bitte halte die App für die Messung geöffnet."
         }
+    }
+    static func responseError(_ response: HTTPURLResponse?) -> MeasurementError {
+        let status = response?.statusCode ?? 0
+        if let header = response?.value(forHTTPHeaderField: "Retry-After") {
+            if let seconds = Double(header), seconds.isFinite {
+                return .retryLater(status, max(0, seconds))
+            }
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
+            if let date = formatter.date(from: header) {
+                return .retryLater(status, max(0, date.timeIntervalSinceNow))
+            }
+        }
+        return .server(status)
     }
 }
 
@@ -29,6 +49,7 @@ struct TransferResult: Sendable {
     let mbps: Double
     let bytes: Int64
     let samples: [SpeedSample]
+    var retries = 0
 }
 
 // All mutable transport state is confined to queue, including delegate callbacks,
@@ -59,6 +80,7 @@ final class TransferMeter: NSObject, URLSessionDataDelegate, @unchecked Sendable
     private var samples: [SpeedSample] = []
     private var tasks: [Int: (size: Int, start: Double)] = [:]
     private var nextUploadSize = 128 * 1024
+    private var nextDownloadSize = 25_000_000
     private var payload = Data()
 
     init(upload: Bool, seconds: Double, streams: Int, budget: Int64, cellularAllowed: Bool, sessionProtocols: [AnyClass]? = nil,
@@ -82,6 +104,12 @@ final class TransferMeter: NSObject, URLSessionDataDelegate, @unchecked Sendable
                 self.cancelled = true
                 if self.continuation != nil { self.finish(error: CancellationError()) }
             }
+        }
+    }
+
+    func consumption() async -> (bytes: Int64, reserved: Int64) {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: (self.wireBytes, self.reserved)) }
         }
     }
 
@@ -118,7 +146,7 @@ final class TransferMeter: NSObject, URLSessionDataDelegate, @unchecked Sendable
     private func spawn() {
         guard !finished, ProcessInfo.processInfo.systemUptime - start < seconds,
               reserved < budget, let session else { return }
-        let count = Int(min(Int64(upload ? nextUploadSize : 25_000_000), budget - reserved))
+        let count = Int(min(Int64(upload ? nextUploadSize : nextDownloadSize), budget - reserved))
         guard count > 0 else { return }
         reserved += Int64(count)
         var components = URLComponents(string: "https://speed.cloudflare.com/\(upload ? "__up" : "__down")")!
@@ -175,7 +203,11 @@ final class TransferMeter: NSObject, URLSessionDataDelegate, @unchecked Sendable
         guard !finished else { completionHandler(.cancel); return }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            completionHandler(.cancel); finish(error: MeasurementError.server(status)); return
+            completionHandler(.cancel)
+            finish(error: MeasurementError.responseError(response as? HTTPURLResponse)); return
+        }
+        if !upload && response.mimeType?.lowercased() == "text/html" {
+            completionHandler(.cancel); finish(error: MeasurementError.unexpectedResponse); return
         }
         completionHandler(.allow)
     }
@@ -194,13 +226,17 @@ final class TransferMeter: NSObject, URLSessionDataDelegate, @unchecked Sendable
         guard !finished, let info = tasks.removeValue(forKey: task.taskIdentifier) else { return }
         if let error { finish(error: error); return }
         let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { finish(error: MeasurementError.server(status)); return }
+        guard (200..<300).contains(status) else { finish(error: MeasurementError.responseError(task.response as? HTTPURLResponse)); return }
         completedRequests += 1
         if upload {
             // Final upload bandwidth counts only payload acknowledged by a successful HTTP response.
             bytes += Int64(info.size)
             let elapsed = max(0.05, ProcessInfo.processInfo.systemUptime - info.start)
             nextUploadSize = min(4 * 1024 * 1024, max(64 * 1024, Int(Double(info.size) / elapsed * 0.6)))
+        } else {
+            // Fast lines use larger chunks, reducing HTTP request pressure.
+            let elapsed = max(0.05, ProcessInfo.processInfo.systemUptime - info.start)
+            nextDownloadSize = min(100_000_000, max(5_000_000, Int(Double(info.size) / elapsed * 0.8)))
         }
         spawn()
         if tasks.isEmpty { finish() }
@@ -227,7 +263,13 @@ final class SpeedtestEngine: ObservableObject {
     @Published private(set) var result: SpeedResult?
     @Published private(set) var awards: [String] = []
     @Published var errorMessage: String?
+    @Published private(set) var recoveryMessage: String?
+    @Published private(set) var gaugeMaximum = 1000.0
+    @Published private(set) var cooldownUntil = UserDefaults.standard.object(forKey: "serverRetryAfter") as? Date
     private var task: Task<Void, Never>?
+    private var hapticTask: Task<Void, Never>?
+    private var activeAttempt: UUID?
+    private var selectedScale: GaugeScale = .automatic
     private var runID = UUID()
     // Display-only smoothing: recorded samples and final results stay untouched.
     private var displayWindow: [(end: Double, duration: Double, speed: Double)] = []
@@ -236,52 +278,62 @@ final class SpeedtestEngine: ObservableObject {
 
     func start(store: AppStore, network: NetworkIdentity, location: LocationService) {
         guard !isRunning else { return }
+        if let until = cooldownUntil, until > Date() {
+            errorMessage = "Der Messserver braucht eine Pause. Bitte warte bis zum Ende des Countdowns."
+            return
+        }
         let config = store.settings
+        selectedScale = config.gaugeScale
+        gaugeMaximum = selectedScale.initialMaximum
+        recoveryMessage = nil
         resetDisplay()
         phase = .latency; liveSpeed = 0; progress = 0; download = nil; upload = nil
         ping = nil; jitter = nil; transferred = 0; samples = []; result = nil; awards = []; errorMessage = nil
         let id = UUID(); runID = id
         UIApplication.shared.isIdleTimerDisabled = config.keepAwake
         location.refresh()
+        startLiveHaptics(store: store)
         task = Task {
             let started = Date()
             do {
-                let latencies = try await measureLatency(cellularAllowed: network.kind == .cellular)
+                let latencies = try await latencyWithRecovery(cellularAllowed: network.kind == .cellular)
                 try Task.checkCancellation()
                 ping = SpeedMath.median(latencies); jitter = SpeedMath.jitter(latencies)
                 let position = config.locationEnabled ? location.snapshot() : nil
                 let budget = Int64(config.budgetMB) * 1_000_000 / 2
                 phase = .download
-                let down = try await TransferMeter(upload: false, seconds: config.mode.seconds,
-                    streams: config.connections, budget: budget, cellularAllowed: network.kind == .cellular) { [weak self] update in
-                    Task { @MainActor in self?.receive(update, id: id, phase: .download, duration: config.mode.seconds, priorBytes: 0) }
-                }.run()
+                let down = try await measureDirection(uploading: false, config: config, budget: budget,
+                    cellularAllowed: network.kind == .cellular, id: id, priorBytes: 0)
                 try Task.checkCancellation()
                 download = down.mbps; phase = .upload; samples = []; liveSpeed = 0
                 resetDisplay()
-                let up = try await TransferMeter(upload: true, seconds: config.mode.seconds,
-                    streams: config.connections, budget: budget, cellularAllowed: network.kind == .cellular) { [weak self] update in
-                    Task { @MainActor in self?.receive(update, id: id, phase: .upload, duration: config.mode.seconds, priorBytes: down.bytes) }
-                }.run()
+                let up = try await measureDirection(uploading: true, config: config, budget: budget,
+                    cellularAllowed: network.kind == .cellular, id: id, priorBytes: down.bytes)
                 try Task.checkCancellation()
                 upload = up.mbps
                 let completed = SpeedResult(date: started, network: network, download: down.mbps, upload: up.mbps,
                     ping: ping ?? 0, jitter: jitter ?? 0, downloadBytes: down.bytes, uploadBytes: up.bytes,
                     duration: Date().timeIntervalSince(started), location: position,
                     downloadSamples: down.samples, uploadSamples: up.samples,
-                    mode: config.mode.rawValue, connections: config.connections)
+                    mode: config.mode.rawValue, connections: config.connections, recoveryAttempts: down.retries + up.retries)
                 awards = RecordBook.achievements(for: completed, previous: store.results)
                 store.add(completed)
                 result = completed; phase = .complete; liveSpeed = down.mbps; progress = 1
+                if selectedScale == .automatic { gaugeMaximum = max(gaugeMaximum, SpeedMath.gaugeMaximum(down.mbps)) }
                 transferred = completed.totalBytes
-                if config.haptics { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+                hapticTask?.cancel(); hapticTask = nil
+                if store.settings.haptics { UINotificationFeedbackGenerator().notificationOccurred(.success) }
             } catch {
                 guard runID == id else { return }
                 if Task.isCancelled || error is CancellationError { phase = .cancelled }
                 else { phase = .failed; errorMessage = error.localizedDescription }
                 liveSpeed = 0
+                if store.settings.haptics && !Task.isCancelled { UINotificationFeedbackGenerator().notificationOccurred(.error) }
             }
-            if runID == id { UIApplication.shared.isIdleTimerDisabled = false; task = nil }
+            if runID == id {
+                UIApplication.shared.isIdleTimerDisabled = false; task = nil
+                recoveryMessage = nil; hapticTask?.cancel(); hapticTask = nil
+            }
         }
     }
 
@@ -289,15 +341,126 @@ final class SpeedtestEngine: ObservableObject {
         guard isRunning else { return }
         // Invalidate progress callbacks before another run can begin.
         runID = UUID(); task?.cancel(); task = nil; phase = .cancelled; liveSpeed = 0
+        activeAttempt = nil; recoveryMessage = nil; hapticTask?.cancel(); hapticTask = nil
         errorMessage = reason
         UIApplication.shared.isIdleTimerDisabled = false
     }
     private func receive(_ update: TransferProgress, id: UUID, phase expected: TestPhase, duration: Double, priorBytes: Int64) {
         guard id == runID, phase == expected else { return }
         smoothDisplay(update)
+        if selectedScale == .automatic { gaugeMaximum = max(gaugeMaximum, SpeedMath.gaugeMaximum(liveSpeed)) }
         transferred = priorBytes + update.bytes
         samples.append(SpeedSample(seconds: update.elapsed, mbps: update.mbps))
         progress = expected == .download ? 0.1 + 0.45 * min(1, update.elapsed / duration) : 0.55 + 0.45 * min(1, update.elapsed / duration)
+    }
+    private func startLiveHaptics(store: AppStore) {
+        hapticTask?.cancel()
+        hapticTask = Task { @MainActor [weak self, weak store] in
+            let impact = UIImpactFeedbackGenerator(style: .rigid)
+            let transition = UIImpactFeedbackGenerator(style: .soft)
+            var previousPhase: TestPhase = .idle
+            impact.prepare()
+            while !Task.isCancelled {
+                guard let self, let store, self.isRunning else { return }
+                let measuring = self.phase == .download || self.phase == .upload
+                let active = measuring && self.recoveryMessage == nil && store.settings.haptics && store.settings.liveHaptics
+                let fraction = min(1, max(0, self.liveSpeed / self.gaugeMaximum))
+                if active {
+                    if previousPhase != self.phase { transition.impactOccurred(intensity: 0.65) }
+                    else if self.liveSpeed > 0.1 {
+                        impact.impactOccurred(intensity: CGFloat((0.15 + 0.85 * sqrt(fraction)) * store.settings.hapticStrength))
+                        impact.prepare()
+                    }
+                }
+                previousPhase = self.phase
+                let interval = active ? 0.45 - 0.30 * fraction : 0.2
+                do { try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000)) }
+                catch { return }
+            }
+        }
+    }
+
+    private func recoveryPolicy(_ error: Error, attempt: Int) -> (delay: Double, retry: Bool)? {
+        let retryCodes = [408, 409, 429, 500, 502, 503, 504]
+        if let error = error as? MeasurementError {
+            switch error {
+            case .retryLater(let status, let delay): return (max(1, delay), retryCodes.contains(status))
+            case .server(let status) where retryCodes.contains(status):
+                return (status == 429 ? 30 : pow(2, Double(attempt + 1)), true)
+            default: return nil
+            }
+        }
+        if let error = error as? URLError,
+           [.timedOut, .networkConnectionLost, .cannotConnectToHost].contains(error.code) {
+            return (pow(2, Double(attempt)), true)
+        }
+        return nil
+    }
+    private func waitBeforeRetry(_ error: Error, attempt: Int) async throws {
+        try Task.checkCancellation()
+        guard let policy = recoveryPolicy(error, attempt: attempt) else { throw error }
+        if error is MeasurementError {
+            let until = Date().addingTimeInterval(policy.delay)
+            if cooldownUntil == nil || cooldownUntil! < until { cooldownUntil = until }
+            UserDefaults.standard.set(cooldownUntil, forKey: "serverRetryAfter")
+        }
+        guard attempt < 2, policy.retry, policy.delay <= 12 else { throw error }
+        recoveryMessage = "Kurze Unterbrechung · neuer Versuch in \(Int(ceil(policy.delay))) s"
+        liveSpeed = 0
+        try await Task.sleep(nanoseconds: UInt64(policy.delay * 1_000_000_000))
+        try Task.checkCancellation()
+        recoveryMessage = nil
+    }
+    private func latencyWithRecovery(cellularAllowed: Bool) async throws -> [Double] {
+        for attempt in 0...2 {
+            do { return try await measureLatency(cellularAllowed: cellularAllowed) }
+            catch {
+                try Task.checkCancellation()
+                try await waitBeforeRetry(error, attempt: attempt)
+            }
+        }
+        throw MeasurementError.noData
+    }
+    private func measureDirection(uploading: Bool, config: AppSettings, budget: Int64,
+                                  cellularAllowed: Bool, id: UUID, priorBytes: Int64) async throws -> TransferResult {
+        var usedQuota: Int64 = 0
+        var failedBytes: Int64 = 0
+        for attempt in 0...2 {
+            try Task.checkCancellation()
+            let remaining = budget - usedQuota
+            guard remaining >= 65_536 else { throw MeasurementError.retryBudget }
+            let attemptID = UUID()
+            activeAttempt = attemptID
+            resetDisplay(); samples = []
+            let offset = priorBytes + failedBytes
+            let direction: TestPhase = uploading ? .upload : .download
+            let meter = TransferMeter(upload: uploading, seconds: config.mode.seconds,
+                streams: max(1, config.connections / (1 << attempt)), budget: remaining, cellularAllowed: cellularAllowed) { [weak self] update in
+                    Task { @MainActor in
+                        guard let self, self.activeAttempt == attemptID else { return }
+                        self.receive(update, id: id, phase: direction, duration: config.mode.seconds, priorBytes: offset)
+                    }
+                }
+            do {
+                let result = try await meter.run()
+                if activeAttempt == attemptID { activeAttempt = nil }
+                try Task.checkCancellation()
+                return TransferResult(mbps: result.mbps, bytes: failedBytes + result.bytes,
+                                      samples: result.samples, retries: attempt)
+            } catch {
+                if activeAttempt == attemptID { activeAttempt = nil }
+                try Task.checkCancellation()
+                let usage = await meter.consumption()
+                try Task.checkCancellation()
+                failedBytes += usage.bytes
+                // Retain the reservation for cancelled in-flight data as well:
+                // retries never open a fresh full data budget.
+                usedQuota += max(usage.bytes, usage.reserved)
+                transferred = priorBytes + failedBytes
+                try await waitBeforeRetry(error, attempt: attempt)
+            }
+        }
+        throw MeasurementError.noData
     }
     private func resetDisplay() {
         displayWindow.removeAll(keepingCapacity: true)
@@ -342,7 +505,8 @@ final class SpeedtestEngine: ObservableObject {
             let (_, response) = try await session.data(for: request)
             let elapsed = (ProcessInfo.processInfo.systemUptime - started) * 1000
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            guard (200..<300).contains(status), response.url?.host == "speed.cloudflare.com" else { throw MeasurementError.server(status) }
+            guard (200..<300).contains(status) else { throw MeasurementError.responseError(response as? HTTPURLResponse) }
+            guard response.url?.host == "speed.cloudflare.com", response.mimeType?.lowercased() != "text/html" else { throw MeasurementError.unexpectedResponse }
             if index > 0 { values.append(elapsed) }
             progress = Double(index + 1) / 7 * 0.1
         }

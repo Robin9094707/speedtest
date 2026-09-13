@@ -68,6 +68,7 @@ struct SpeedResult: Codable, Identifiable, Equatable {
     var server = "Cloudflare Edge"
     var mode: String
     var connections: Int
+    var recoveryAttempts: Int? = nil
     var totalBytes: Int64 { downloadBytes + uploadBytes }
 }
 
@@ -86,6 +87,14 @@ enum SpeedUnit: String, Codable, CaseIterable, Identifiable {
     func format(_ mbps: Double) -> String { SpeedMath.number(convert(mbps)) }
 }
 
+enum GaugeScale: Int, Codable, CaseIterable, Identifiable {
+    case automatic = 0, hundred = 100, twoFifty = 250, threeHundred = 300
+    case fiveHundred = 500, thousand = 1000, twoThousandFiveHundred = 2500
+    var id: Int { rawValue }
+    var initialMaximum: Double { self == .automatic ? 1000 : Double(rawValue) }
+    var label: String { self == .automatic ? "Automatisch (ab 1.000)" : "\(rawValue) Mbit/s" }
+}
+
 struct AppSettings: Codable, Equatable {
     var mode: TestMode = .balanced
     var connections = 4
@@ -98,6 +107,33 @@ struct AppSettings: Codable, Equatable {
     var locationEnabled = true
     var confirmCellular = true
     var keepAwake = true
+    var gaugeScale: GaugeScale = .automatic
+    var liveHaptics = true
+    var hapticStrength = 0.7
+
+    init() {}
+    // New preferences must not invalidate settings or history from earlier IPAs.
+    private enum CodingKeys: String, CodingKey {
+        case mode, connections, budgetMB, unit, appearance, accent, haptics, animations
+        case locationEnabled, confirmCellular, keepAwake, gaugeScale, liveHaptics, hapticStrength
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try c.decodeIfPresent(TestMode.self, forKey: .mode) ?? .balanced
+        connections = try c.decodeIfPresent(Int.self, forKey: .connections) ?? 4
+        budgetMB = try c.decodeIfPresent(Int.self, forKey: .budgetMB) ?? 1024
+        unit = try c.decodeIfPresent(SpeedUnit.self, forKey: .unit) ?? .megabits
+        appearance = try c.decodeIfPresent(String.self, forKey: .appearance) ?? "Dunkel"
+        accent = try c.decodeIfPresent(String.self, forKey: .accent) ?? "Polarlicht"
+        haptics = try c.decodeIfPresent(Bool.self, forKey: .haptics) ?? true
+        animations = try c.decodeIfPresent(Bool.self, forKey: .animations) ?? true
+        locationEnabled = try c.decodeIfPresent(Bool.self, forKey: .locationEnabled) ?? true
+        confirmCellular = try c.decodeIfPresent(Bool.self, forKey: .confirmCellular) ?? true
+        keepAwake = try c.decodeIfPresent(Bool.self, forKey: .keepAwake) ?? true
+        gaugeScale = try c.decodeIfPresent(GaugeScale.self, forKey: .gaugeScale) ?? .automatic
+        liveHaptics = try c.decodeIfPresent(Bool.self, forKey: .liveHaptics) ?? true
+        hapticStrength = min(1, max(0.2, try c.decodeIfPresent(Double.self, forKey: .hapticStrength) ?? 0.7))
+    }
 }
 
 enum SpeedMath {

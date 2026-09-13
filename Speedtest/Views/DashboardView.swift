@@ -10,7 +10,11 @@ struct DashboardView: View {
     @State private var cellularPrompt = false
     @State private var selectedResult: SpeedResult?
     @State private var showNetworkEditor = false
-    @State private var maximum = 1000.0
+    private var maximum: Double {
+        store.settings.gaugeScale == .automatic
+            ? max(engine.gaugeMaximum, SpeedMath.gaugeMaximum(engine.liveSpeed))
+            : store.settings.gaugeScale.initialMaximum
+    }
     private var accent: Color { Palette.accent(store.settings.accent) }
     private var animate: Bool { store.settings.animations && !reduceMotion }
 
@@ -41,23 +45,17 @@ struct DashboardView: View {
                             }
                         }.glassPanel(radius: 32)
 
-                        Button {
-                            if engine.isRunning { engine.cancel() }
-                            else if network.kind == .cellular && store.settings.confirmCellular { cellularPrompt = true }
-                            else { start() }
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: engine.isRunning ? "stop.fill" : "bolt.fill")
-                                Text(engine.isRunning ? "Test stoppen" : "Speedtest starten")
-                            }.font(.title3.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, 22)
-                        }.buttonStyle(PrimaryGlassButton()).disabled(!network.connected && !engine.isRunning)
-                            .accessibilityIdentifier("startTest")
+                        startControl
 
                         if !network.connected {
                             Label("Keine Internetverbindung", systemImage: "wifi.slash").font(.subheadline).foregroundStyle(.orange)
                         }
                         if let error = engine.errorMessage {
                             Label(error, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange)
+                                .padding(18).frame(maxWidth: .infinity, alignment: .leading).glassPanel()
+                        }
+                        if let message = engine.recoveryMessage {
+                            Label(message, systemImage: "arrow.clockwise").font(.subheadline).foregroundStyle(accent)
                                 .padding(18).frame(maxWidth: .infinity, alignment: .leading).glassPanel()
                         }
                         HStack(spacing: 12) {
@@ -117,9 +115,27 @@ struct DashboardView: View {
                 Button("Abbrechen", role: .cancel) {}
                 Button("Test starten") { start() }
             } message: { Text("Dieser Test überträgt bis zu etwa \(store.settings.budgetMB) MB Nutzdaten. Dein Mobilfunkanbieter kann zusätzlich Protokolldaten mitzählen.") }
-            .onChange(of: engine.liveSpeed) { _, value in maximum = max(maximum, SpeedMath.gaugeMaximum(value)) }
             .onChange(of: network.revision) { _, _ in networkAlias = "" }
             .animation(animate ? .spring(duration: 0.5) : nil, value: engine.awards)
+        }
+    }
+
+    private var startControl: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { clock in
+            let remaining = max(0, ceil(engine.cooldownUntil?.timeIntervalSince(clock.date) ?? 0))
+            let pauseLabel = remaining > 86_400 ? "Serverpause · mehr als 24 Std." : "Serverpause · \(Int(min(86_400, remaining))) s"
+            Button {
+                if engine.isRunning { engine.cancel() }
+                else if network.kind == .cellular && store.settings.confirmCellular { cellularPrompt = true }
+                else { start() }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: engine.isRunning ? "stop.fill" : remaining > 0 ? "hourglass" : "bolt.fill")
+                    Text(engine.isRunning ? "Test stoppen" : remaining > 0 ? pauseLabel : "Speedtest starten")
+                }.font(.title3.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, 22)
+            }.buttonStyle(PrimaryGlassButton())
+                .disabled(!engine.isRunning && (!network.connected || remaining > 0))
+                .accessibilityIdentifier("startTest")
         }
     }
 
@@ -195,7 +211,6 @@ struct DashboardView: View {
     }
     private func start() {
         guard network.connected else { return }
-        maximum = 1000
         if store.settings.haptics { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
         engine.start(store: store, network: network.identity(alias: networkAlias), location: location)
     }

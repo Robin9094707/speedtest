@@ -32,6 +32,9 @@ struct ResultDetailView: View {
                                 detail("Dauer", "\(SpeedMath.number(result.duration)) s")
                                 detail("Messprofil", "\(result.mode) · \(result.connections) Streams")
                                 detail("Server", result.server)
+                                if let attempts = result.recoveryAttempts, attempts > 0 {
+                                    detail("Wiederholte Lastphasen", "\(attempts) · weniger Verbindungen")
+                                }
                             }.padding(20).glassPanel()
                             VStack(alignment: .leading, spacing: 15) {
                                 Text("Geschwindigkeitsverlauf").font(.headline)

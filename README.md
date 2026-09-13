@@ -15,6 +15,11 @@ Eine native, deutschsprachige SwiftUI-App für Robin Juhas. Großer Glastacho, e
 
 ## Funktionen
 
+- Wählbare Tacho-Skalen: 100, 250, 300, 500, 1.000, 2.500 Mbit/s oder Automatik. Eine feste Skala begrenzt nur den Zeiger; die numerische Messung bleibt offen nach oben.
+- Einstellbare Live-Haptik: ruhige bis schnelle, kräftigere Impulse abhängig von Geschwindigkeit und Skala; sanfte Phasenwechsel und Abschlussfeedback. Während Wiederholungspausen, nach Stopp oder im Hintergrund endet die Live-Haptik.
+- Schonendere schnelle Downloads mit adaptiven Blöcken bis 100 MB. Vorübergehende Verbindungsfehler und bestimmte HTTP-Fehler lösen höchstens zwei neue Versuche je Phase mit weniger Verbindungen aus. `Retry-After` wird berücksichtigt; längere Serverpausen werden als Countdown angezeigt und über App-Neustarts hinweg gespeichert. Es werden weder Serverlimits umgangen noch unbegrenzt Anfragen wiederholt.
+- Fehlgeschlagene Lastversuche verbrauchen weiterhin das vorhandene Datenbudget. Ergebnisse beruhen auf dem erfolgreichen Versuch; Wiederholungen werden in den Details ausgewiesen. HTTP 200 mit einer HTML-Anmeldeseite wird als ungültige Testantwort erklärt, nicht als vermeintlicher Bann.
+
 - Native SwiftUI-Oberfläche mit Liquid Glass, großem Start-/Stoppknopf, adaptivem 270°-Tacho und Live-Kurve.
 - Basisskala 1.000 Mbit/s; automatische Erweiterung auf 2.500, 5.000, 10.000 Mbit/s und darüber.
 - Ablauf: HTTPS-Latenz und Jitter → Download → Upload. Keine simulierten Messwerte.
