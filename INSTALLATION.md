@@ -15,7 +15,7 @@ Alternativ das Projekt in Xcode 26+ öffnen, das eigene Team wählen, das angesc
 ## Beim ersten Start
 
 1. „Los geht’s“ antippen und nach Wunsch Standort „Beim Verwenden der App“ erlauben.
-2. Falls kein WLAN-Name erscheint: das WLAN auf dem Startbildschirm benennen. Für wiederholte Tests im selben WLAN denselben Namen wählen.
+2. Falls kein WLAN-Name erscheint: auf dem Startbildschirm das Netzprofil antippen und das WLAN benennen. Für wiederholte Tests im selben WLAN denselben Namen wählen.
 3. In den Einstellungen bei Bedarf Datenlimit und Testdauer anpassen.
 4. „Speedtest starten“ antippen. Die App geöffnet lassen. Nach Download folgt automatisch Upload.
 5. Ergebnisse stehen im Verlauf. Antippen zum Notieren, Teilen oder Löschen; Messungen mit Standort stehen auch auf der Karte.

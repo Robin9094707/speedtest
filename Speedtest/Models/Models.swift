@@ -37,7 +37,7 @@ struct NetworkIdentity: Codable, Equatable {
     }
 }
 
-struct TestLocation: Codable, Equatable {
+struct TestLocation: Codable, Equatable, Sendable {
     let latitude: Double
     let longitude: Double
     let accuracy: Double

@@ -37,18 +37,25 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
         guard enabled, let latest, abs(latest.timestamp.timeIntervalSinceNow) < 120, latest.accuracy >= 0, latest.accuracy <= 1000 else { return nil }
         return latest
     }
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        authorization = manager.authorizationStatus
-        refresh()
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.authorization = self.manager.authorizationStatus
+            self.refresh()
+        }
     }
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard enabled, let location = locations.last, location.horizontalAccuracy >= 0 else { return }
-        latest = TestLocation(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude,
-                              accuracy: location.horizontalAccuracy, timestamp: location.timestamp)
-        message = "Standort bereit · ±\(Int(location.horizontalAccuracy)) m"
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        let snapshot = TestLocation(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude,
+                                    accuracy: location.horizontalAccuracy, timestamp: location.timestamp)
+        Task { @MainActor [weak self] in
+            guard let self, self.enabled else { return }
+            self.latest = snapshot
+            self.message = "Standort bereit · ±\(Int(snapshot.accuracy)) m"
+        }
     }
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        message = "Standort momentan nicht verfügbar"
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor [weak self] in self?.message = "Standort momentan nicht verfügbar" }
     }
 }
 
@@ -67,7 +74,9 @@ final class NetworkService: ObservableObject {
             let kind: ConnectionKind = path.usesInterfaceType(.wifi) ? .wifi : path.usesInterfaceType(.cellular) ? .cellular : path.usesInterfaceType(.wiredEthernet) ? .wired : .other
             let online = path.status == .satisfied
             let constrained = path.isConstrained
-            let fingerprint = "\(online):\(kind.rawValue):\(path.availableInterfaces.map(\.name).sorted().joined(separator: ","))"
+            // Changes to an unused cellular interface must not cancel a Wi-Fi test.
+            let usedInterfaces = path.availableInterfaces.filter { path.usesInterfaceType($0.type) }.map(\.name).sorted()
+            let fingerprint = "\(online):\(kind.rawValue):\(usedInterfaces.joined(separator: ","))"
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if fingerprint != self.fingerprint { self.revision += 1; self.fingerprint = fingerprint }

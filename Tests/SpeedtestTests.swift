@@ -96,6 +96,18 @@ final class ServerErrorProtocol: URLProtocol {
 }
 
 final class TransferTests: XCTestCase {
+    // An intentionally small real integration test (at most 320 KB of payload).
+    // Confirms the public provider still accepts native HTTPS downloads and uploads.
+    func testLiveCloudflareTransfers() async throws {
+        let down = try await TransferMeter(upload: false, seconds: 5, streams: 1, budget: 65_536,
+                                           cellularAllowed: true) { _ in }.run()
+        XCTAssertEqual(down.bytes, 65_536)
+        XCTAssertGreaterThan(down.mbps, 0)
+        let up = try await TransferMeter(upload: true, seconds: 5, streams: 1, budget: 262_144,
+                                         cellularAllowed: true) { _ in }.run()
+        XCTAssertGreaterThan(up.bytes, 0)
+        XCTAssertGreaterThan(up.mbps, 0)
+    }
     func testHTTPFailureNeverBecomesSpeedResult() async {
         let meter = TransferMeter(upload: false, seconds: 1, streams: 2, budget: 10000,
                                   cellularAllowed: false, sessionProtocols: [ServerErrorProtocol.self]) { _ in }
@@ -105,7 +117,6 @@ final class TransferTests: XCTestCase {
     }
     func testCancellationBeforeStartFinishesExactlyOnce() async {
         let task = Task {
-            try Task.checkCancellation()
             return try await TransferMeter(upload: false, seconds: 10, streams: 4, budget: 10000,
                                            cellularAllowed: false, sessionProtocols: [ServerErrorProtocol.self]) { _ in }.run()
         }

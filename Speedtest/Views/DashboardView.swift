@@ -9,6 +9,7 @@ struct DashboardView: View {
     @State private var networkAlias = ""
     @State private var cellularPrompt = false
     @State private var selectedResult: SpeedResult?
+    @State private var showNetworkEditor = false
     @State private var maximum = 1000.0
     private var accent: Color { Palette.accent(store.settings.accent) }
     private var animate: Bool { store.settings.animations && !reduceMotion }
@@ -20,7 +21,7 @@ struct DashboardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         header
-                        networkPanel
+                        compactNetwork
                         VStack(spacing: 0) {
                             HStack {
                                 Label(engine.phase.rawValue, systemImage: engine.isRunning ? "waveform.path" : "smallcircle.filled.circle")
@@ -83,9 +84,9 @@ struct DashboardView: View {
                         }
                         if !engine.samples.isEmpty {
                             VStack(alignment: .leading, spacing: 14) {
-                                Text("LIVE-VERLAUF").font(.caption.weight(.bold)).tracking(2).foregroundStyle(.secondary)
-                                SpeedTrace(download: engine.phase == .upload ? [] : engine.samples,
-                                           upload: engine.phase == .upload ? engine.samples : []).frame(height: 80)
+                                Text(engine.result == nil ? "LIVE-VERLAUF" : "MESSVERLAUF").font(.caption.weight(.bold)).tracking(2).foregroundStyle(.secondary)
+                                SpeedTrace(download: engine.result?.downloadSamples ?? (engine.phase == .upload ? [] : engine.samples),
+                                           upload: engine.result?.uploadSamples ?? (engine.phase == .upload ? engine.samples : [])).frame(height: 80)
                                 Text("Momentane Rate · Mbit/s").font(.caption2).foregroundStyle(.secondary)
                             }.padding(20).glassPanel()
                         }
@@ -102,6 +103,16 @@ struct DashboardView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $selectedResult) { ResultDetailView(resultID: $0.id) }
+            .sheet(isPresented: $showNetworkEditor) {
+                NavigationStack {
+                    ZStack {
+                        AmbientBackground()
+                        ScrollView { networkPanel.padding(20) }
+                    }
+                    .navigationTitle("Dein Netzprofil").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Fertig") { showNetworkEditor = false } } }
+                }.presentationDetents([.medium, .large])
+            }
             .alert("Über Mobilfunk messen?", isPresented: $cellularPrompt) {
                 Button("Abbrechen", role: .cancel) {}
                 Button("Test starten") { start() }
@@ -158,6 +169,22 @@ struct DashboardView: View {
             Label(store.settings.locationEnabled ? location.message : "Standort ausgeschaltet", systemImage: "location")
                 .font(.caption2).foregroundStyle(.secondary)
         }.padding(18).glassPanel()
+    }
+
+    private var compactNetwork: some View {
+        Button { showNetworkEditor = true } label: {
+            HStack(spacing: 13) {
+                Image(systemName: network.kind.symbol).font(.title3).foregroundStyle(accent)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(network.identity(alias: networkAlias).name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(network.kind == .wifi && network.ssid == nil && networkAlias.isEmpty ? "Für WLAN-Rekorde hier benennen" : network.connected ? "Verbunden · Netzprofil bearbeiten" : "Keine Internetverbindung")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 5)
+                Circle().fill(network.connected ? .green : .orange).frame(width: 7, height: 7)
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
+            }.padding(16).glassPanel(radius: 22)
+        }.buttonStyle(.plain).disabled(engine.isRunning).accessibilityIdentifier("editNetwork")
     }
 
     private func smallMetric(_ title: String, _ value: String) -> some View {
