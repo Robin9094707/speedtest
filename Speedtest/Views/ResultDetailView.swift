@@ -25,6 +25,10 @@ struct ResultDetailView: View {
                                 MetricTile(title: "Download", symbol: "arrow.down", value: store.settings.unit.format(result.download), unit: store.settings.unit.rawValue, color: .cyan)
                                 MetricTile(title: "Upload", symbol: "arrow.up", value: store.settings.unit.format(result.upload), unit: store.settings.unit.rawValue, color: Palette.upload)
                             }
+                            Button { share = true } label: {
+                                Label("Ergebnis als Bild teilen", systemImage: "square.and.arrow.up")
+                                    .font(.headline).frame(maxWidth: .infinity).padding(18).glassPanel()
+                            }.buttonStyle(.plain)
                             VStack(spacing: 16) {
                                 detail("HTTP-Ping", "\(SpeedMath.number(result.ping)) ms")
                                 detail("Jitter", "\(SpeedMath.number(result.jitter)) ms")
@@ -80,15 +84,18 @@ struct ResultDetailView: View {
             }
             .task { note = result?.note ?? "" }
             .sheet(isPresented: $share) {
-                if let r = result {
-                    ShareSheet(items: ["RJ Speedtest · \(r.network.name)\n↓ \(SpeedMath.number(r.download)) Mbit/s\n↑ \(SpeedMath.number(r.upload)) Mbit/s\nHTTP-Ping: \(SpeedMath.number(r.ping)) ms\n\(r.date.formatted(date: .abbreviated, time: .shortened))\n\(note)"])
-                }
+                if let r = result { ResultShareView(result: shareSnapshot(r)) }
             }
             .alert("Speedtest löschen?", isPresented: $deletePrompt) {
                 Button("Nein", role: .cancel) {}
                 Button("Ja, löschen", role: .destructive) { store.remove(resultID); if store.results.allSatisfy({ $0.id != resultID }) { dismiss() } }
             } message: { Text("Diese Messung wird aus Verlauf, Karte und Rekorden entfernt.") }
         }
+    }
+    private func shareSnapshot(_ result: SpeedResult) -> SpeedResult {
+        var snapshot = result
+        snapshot.note = note
+        return snapshot
     }
     private func detail(_ label: String, _ value: String) -> some View {
         HStack { Text(label).foregroundStyle(.secondary); Spacer(); Text(value).multilineTextAlignment(.trailing) }.font(.subheadline)

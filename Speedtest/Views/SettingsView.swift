@@ -33,6 +33,14 @@ struct ServerSelectionView: View {
                 } footer: {
                     Text("Liste von LibreSpeed · ausschließlich HTTPS. Manche gelisteten Server unterstützen HTTPS möglicherweise nicht. Es werden keine Geschwindigkeitstests im Hintergrund gestartet.")
                 }
+                Section("WLAN-Erkennung") {
+                    Text("Die App fragt das verbundene WLAN über Apples WLAN-Schnittstellen ab und merkt sich eigene Namen pro verfügbarer Kennung. Gleichnamige WLANs werden als ein Netz behandelt; Mesh-Zugangspunkte bleiben so zusammen.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Standortfreigabe mit genauer Position und „Access WiFi Information“ im Signierungsprofil sind normalerweise nötig. „Lokales Netzwerk“ allein gibt keinen WLAN-Namen frei. Ohne WLAN-Kennung bleibt die Zuordnung manuell.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    LabeledContent("Gespeicherte eigene Namen", value: String(store.settings.networkNames.count))
+                }
+
                 Section("Messserver") {
                     ForEach(choices) { server in
                         Button {
@@ -93,6 +101,14 @@ struct SettingsView: View {
                 } header: { Text("Messung") } footer: {
                     Text("Ein Test misst erst Download, dann Upload. Je Richtung gilt die halbe Datenmenge. Bei Erreichen des Limits endet die Phase früher. 1 GB entspricht hier 1.024 MB Nutzdaten; Protokolldaten kommen hinzu. Mehrere Verbindungen können schnelle Anschlüsse besser auslasten.")
                 }.disabled(engine.isRunning)
+
+                Section("WLAN-Erkennung") {
+                    Text("Die App fragt das verbundene WLAN über Apples WLAN-Schnittstellen ab und merkt sich eigene Namen pro verfügbarer Kennung. Gleichnamige WLANs werden als ein Netz behandelt; Mesh-Zugangspunkte bleiben so zusammen.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Standortfreigabe mit genauer Position und „Access WiFi Information“ im Signierungsprofil sind normalerweise nötig. „Lokales Netzwerk“ allein gibt keinen WLAN-Namen frei. Ohne WLAN-Kennung bleibt die Zuordnung manuell.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    LabeledContent("Gespeicherte eigene Namen", value: String(store.settings.networkNames.count))
+                }
 
                 Section("Messserver") {
                     NavigationLink { ServerSelectionView() } label: {

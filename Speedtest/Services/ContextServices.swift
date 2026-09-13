@@ -3,6 +3,8 @@ import Combine
 import CoreLocation
 import Network
 import NetworkExtension
+import SystemConfiguration.CaptiveNetwork
+import CryptoKit
 
 @MainActor
 final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -68,6 +70,8 @@ final class NetworkService: ObservableObject {
     @Published private(set) var revision = 0
     private let monitor = NWPathMonitor()
     private var fingerprint = ""
+    @Published private(set) var accessPointKey: String?
+    private var refreshID = UUID()
 
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
@@ -90,14 +94,63 @@ final class NetworkService: ObservableObject {
     }
     deinit { monitor.cancel() }
     func refreshSSID() {
-        guard kind == .wifi else { ssid = nil; return }
+        let id = UUID(); refreshID = id
+        guard kind == .wifi, connected else { ssid = nil; accessPointKey = nil; return }
         NEHotspotNetwork.fetchCurrent { [weak self] network in
+            let name = network?.ssid
+            let bssid = network?.bssid
             Task { @MainActor [weak self] in
-                guard let self, self.kind == .wifi else { return }
-                if let old = self.ssid, let new = network?.ssid, old != new { self.revision += 1 }
-                self.ssid = network?.ssid
+                guard let self, self.refreshID == id, self.kind == .wifi, self.connected else { return }
+                let fallback = Self.legacyWiFi()
+                var newName = Self.validName(name) ?? Self.validName(fallback.name)
+                let address = Self.validAddress(bssid) ?? Self.validAddress(fallback.address)
+                if address == nil, let value = newName, ["Wi-Fi", "WLAN"].contains(value) { newName = nil }
+                let key = address.map { value in
+                    "wifi:ap:" + SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+                }
+                // SSID groups mesh access points; BSSID is a fallback when the name is unavailable.
+                // Do not identify a network from a changing/public IP address.
+                let changed = (self.ssid != nil && self.ssid != newName)
+                    || (self.ssid == nil && self.accessPointKey != nil && self.accessPointKey != key)
+                self.ssid = newName; self.accessPointKey = key
+                if changed { self.revision += 1 }
             }
         }
     }
-    func identity(alias: String) -> NetworkIdentity { .make(kind: kind, ssid: ssid, alias: alias) }
+    private static func legacyWiFi() -> (name: String?, address: String?) {
+        guard let interfaces = CNCopySupportedInterfaces() as? [String] else { return (nil, nil) }
+        for interface in interfaces {
+            if let info = CNCopyCurrentNetworkInfo(interface as CFString) as? [String: Any] {
+                return (info[kCNNetworkInfoKeySSID as String] as? String,
+                        info[kCNNetworkInfoKeyBSSID as String] as? String)
+            }
+        }
+        return (nil, nil)
+    }
+    private static func validName(_ name: String?) -> String? {
+        guard let name, !name.isEmpty else { return nil }
+        return name
+    }
+    private static func validAddress(_ address: String?) -> String? {
+        guard let address else { return nil }
+        let groups = address.lowercased().split(separator: ":")
+        guard groups.count == 6 else { return nil }
+        let bytes = groups.compactMap { UInt8($0, radix: 16) }
+        guard bytes.count == 6, bytes.contains(where: { $0 != 0 }), !bytes.allSatisfy({ $0 == 255 }) else { return nil }
+        return bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
+    }
+    var automaticKey: String? {
+        guard kind == .wifi else { return nil }
+        return ssid.map { "wifi:ssid:" + $0 } ?? accessPointKey
+    }
+    var recognitionMessage: String {
+        if ssid != nil { return "WLAN automatisch erkannt · eigener Name wird gespeichert" }
+        if accessPointKey != nil { return "WLAN-Zugangspunkt erkannt · einmal benennen genügt" }
+        return "iOS gibt keine WLAN-Kennung frei. Standort mit genauer Position und Wi-Fi-Berechtigung der Signatur prüfen. Ohne Kennung ist nur eine manuelle Zuordnung möglich."
+    }
+    func identity(alias: String, names: [String: String] = [:]) -> NetworkIdentity {
+        guard let key = automaticKey else { return .make(kind: kind, ssid: ssid, alias: alias) }
+        let draft = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        return NetworkIdentity(kind: .wifi, name: !draft.isEmpty ? draft : names[key] ?? ssid ?? "Erkanntes WLAN", recordKey: key)
+    }
 }

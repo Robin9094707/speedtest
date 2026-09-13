@@ -11,6 +11,7 @@ struct DashboardView: View {
     @State private var selectedResult: SpeedResult?
     @State private var showNetworkEditor = false
     @State private var showServers = false
+    @State private var shareResult: SpeedResult?
     private var maximum: Double {
         store.settings.gaugeScale == .automatic
             ? max(engine.gaugeMaximum, SpeedMath.gaugeMaximum(engine.liveSpeed))
@@ -87,6 +88,10 @@ struct DashboardView: View {
                                 .transition(.scale(scale: 0.95).combined(with: .opacity))
                         }
                         if let result = engine.result {
+                            Button { shareResult = store.results.first { $0.id == result.id } ?? result } label: {
+                                Label("Ergebnis als Bild teilen", systemImage: "square.and.arrow.up")
+                                    .font(.headline).frame(maxWidth: .infinity).padding(18).glassPanel()
+                            }.buttonStyle(.plain)
                             Button { selectedResult = result } label: {
                                 HStack { Label("Ergebnis & Notiz", systemImage: "doc.text.magnifyingglass"); Spacer(); Image(systemName: "chevron.right") }
                                     .font(.headline).padding(20).glassPanel()
@@ -112,6 +117,7 @@ struct DashboardView: View {
                 }.scrollIndicators(.hidden)
             }
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(item: $shareResult) { ResultShareView(result: $0) }
             .sheet(isPresented: $showServers) { ServerSelectionView() }
             .sheet(item: $selectedResult) { ResultDetailView(resultID: $0.id) }
             .sheet(isPresented: $showNetworkEditor) {
@@ -173,22 +179,34 @@ struct DashboardView: View {
                 Image(systemName: network.kind.symbol).font(.title3).foregroundStyle(accent)
                     .frame(width: 42, height: 42).background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(network.identity(alias: networkAlias).name).font(.headline).lineLimit(1)
+                    Text(network.identity(alias: networkAlias, names: store.settings.networkNames).name).font(.headline).lineLimit(1)
                     Text(network.constrained ? "Datensparmodus ist aktiv" : network.kind.rawValue).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Circle().fill(network.connected ? .green : .orange).frame(width: 7, height: 7)
             }
-            if network.ssid == nil {
-                TextField(network.kind == .wifi ? "WLAN benennen – z. B. Zuhause" : "Netzprofil – z. B. o2", text: $networkAlias)
+            if network.kind == .wifi || network.ssid == nil {
+                TextField(network.kind == .wifi ? "Eigener WLAN-Name – z. B. Zuhause" : "Netzprofil – z. B. o2", text: $networkAlias)
                     .font(.subheadline).textInputAutocapitalization(.words).autocorrectionDisabled()
                     .disabled(engine.isRunning).accessibilityIdentifier("networkAlias")
                 if network.kind == .wifi {
-                    Text("iOS gibt den WLAN-Namen nicht immer frei. Wähle für dasselbe WLAN immer denselben Namen. Ohne Namen werden keine WLAN-Rekorde zugeordnet.")
-                        .font(.caption2).foregroundStyle(.secondary)
+                    if let ssid = network.ssid {
+                        Label("WLAN-Name: \(ssid)", systemImage: "wifi").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text(network.recognitionMessage).font(.caption2).foregroundStyle(.secondary)
+                    if let key = network.automaticKey {
+                        Button("Namen für dieses WLAN merken") {
+                            store.renameNetwork(key: key, name: networkAlias)
+                            networkAlias = ""
+                        }.disabled(networkAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || engine.isRunning)
+                    }
+                    Button("WLAN-Erkennung aktualisieren") { network.refreshSSID() }.disabled(engine.isRunning)
+                    Button("Standortfreigabe in iOS öffnen") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }
                 }
             }
-            if network.ssid == nil && !store.records.isEmpty && !engine.isRunning {
+            if network.automaticKey == nil && !store.records.isEmpty && !engine.isRunning {
                 Menu {
                     ForEach(store.records.filter { $0.kind == network.kind }) { record in
                         Button(record.name) { networkAlias = record.name }
@@ -205,8 +223,8 @@ struct DashboardView: View {
             HStack(spacing: 13) {
                 Image(systemName: network.kind.symbol).font(.title3).foregroundStyle(accent)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(network.identity(alias: networkAlias).name).font(.subheadline.weight(.semibold)).lineLimit(1)
-                    Text(network.kind == .wifi && network.ssid == nil && networkAlias.isEmpty ? "Für WLAN-Rekorde hier benennen" : network.connected ? "Verbunden · Netzprofil bearbeiten" : "Keine Internetverbindung")
+                    Text(network.identity(alias: networkAlias, names: store.settings.networkNames).name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(network.kind == .wifi && network.automaticKey == nil && networkAlias.isEmpty ? "Für WLAN-Rekorde hier benennen" : network.connected ? "Verbunden · Netzprofil bearbeiten" : "Keine Internetverbindung")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 5)
@@ -225,7 +243,10 @@ struct DashboardView: View {
     private func start() {
         guard network.connected else { return }
         if store.settings.haptics { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
-        engine.start(store: store, network: network.identity(alias: networkAlias), location: location)
+        if let key = network.automaticKey, !networkAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            store.renameNetwork(key: key, name: networkAlias)
+        }
+        engine.start(store: store, network: network.identity(alias: networkAlias, names: store.settings.networkNames), location: location)
     }
 }
 

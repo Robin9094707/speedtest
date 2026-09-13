@@ -42,6 +42,16 @@ final class AppStore: ObservableObject {
     func add(_ result: SpeedResult) { commit([result] + results) }
     func remove(_ id: UUID) { commit(results.filter { $0.id != id }) }
     func removeAll() { commit([]) }
+    func renameNetwork(key: String, name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        settings.networkNames[key] = name
+        var updated = results
+        for index in updated.indices where updated[index].network.recordKey == key {
+            updated[index].network.name = name
+        }
+        commit(updated)
+    }
     func updateNote(_ id: UUID, note: String) {
         var updated = results
         guard let index = updated.firstIndex(where: { $0.id == id }) else { return }

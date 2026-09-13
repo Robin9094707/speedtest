@@ -46,6 +46,13 @@ struct RootView: View {
             if ProcessInfo.processInfo.arguments.contains("-ui-testing") { welcomeNeeded = false }
             else if !welcomeNeeded { location.activate(enabled: store.settings.locationEnabled) }
         }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                network.refreshSSID()
+                do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { engine.cancel(reason: MeasurementError.background.localizedDescription) }
             if phase == .active { network.refreshSSID(); location.refresh() }
