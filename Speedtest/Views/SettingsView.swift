@@ -82,6 +82,8 @@ struct SettingsView: View {
     @State private var shareURL: URL?
     @State private var exportError: String?
     @State private var showShare = false
+    @State private var showNews = false
+    @State private var showServers = false
 
     var body: some View {
         NavigationStack {
@@ -111,7 +113,7 @@ struct SettingsView: View {
                 }
 
                 Section("Messserver") {
-                    NavigationLink { ServerSelectionView() } label: {
+                    Button { showServers = true } label: {
                         LabeledContent("Server wechseln", value: store.settings.measurementServer.name)
                     }.disabled(engine.isRunning)
                     Text("Bei einer Ablehnung oder Pause kannst du einen anderen Anbieter auswählen. Ein Test nutzt durchgehend denselben Server.")
@@ -168,6 +170,11 @@ struct SettingsView: View {
                         .disabled(store.results.isEmpty || engine.isRunning)
                 } header: { Text("Deine Daten") } footer: { Text("Exporte enthalten auch gespeicherte Standorte und Notizen. Teile sie nur, wenn du diese Angaben weitergeben möchtest.") }
 
+                Section("Version 2.0") {
+                    Button("Alle Neuerungen ansehen") { showNews = true }
+                    NavigationLink("JSON-Verlauf wiederherstellen") { ImportView() }.disabled(engine.isRunning)
+                }
+
                 Section("Über RJ Speedtest") {
                     LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"))")
                     LabeledContent("Entwickelt für", value: "Robin Juhas")
@@ -180,6 +187,8 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Einstellungen")
+            .sheet(isPresented: $showNews) { VersionTwoView() }
+            .sheet(isPresented: $showServers) { ServerSelectionView() }
             .alert("Alle Messungen löschen?", isPresented: $deleteAll) {
                 Button("Abbrechen", role: .cancel) {}
                 Button("Alles löschen", role: .destructive) { store.removeAll() }

@@ -69,6 +69,12 @@ struct SpeedResult: Codable, Identifiable, Equatable {
     var mode: String
     var connections: Int
     var recoveryAttempts: Int? = nil
+    var favorite: Bool? = nil
+    var tags: [String]? = nil
+    var placeLabel: String? = nil
+    var experimentID: UUID? = nil
+    var budgetMB: Int? = nil
+    var serverID: String? = nil
     var totalBytes: Int64 { downloadBytes + uploadBytes }
 }
 

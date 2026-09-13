@@ -347,7 +347,7 @@ final class SpeedtestEngine: ObservableObject {
     private var lastDisplayTime = 0.0
     var isRunning: Bool { phase.running }
 
-    func start(store: AppStore, network: NetworkIdentity, location: LocationService) {
+    func start(store: AppStore, network: NetworkIdentity, location: LocationService, placeLabel: String? = nil, experimentID: UUID? = nil) {
         guard !isRunning else { return }
         if let until = cooldown(for: store.settings.measurementServer), until > Date() {
             errorMessage = "Dieser Messserver braucht eine Pause. Du kannst einen anderen Messserver wählen oder den Countdown abwarten."
@@ -387,7 +387,7 @@ final class SpeedtestEngine: ObservableObject {
                     ping: ping ?? 0, jitter: jitter ?? 0, downloadBytes: down.bytes, uploadBytes: up.bytes,
                     duration: Date().timeIntervalSince(started), location: position,
                     downloadSamples: down.samples, uploadSamples: up.samples,
-                    server: config.measurementServer.name, mode: config.mode.rawValue, connections: config.connections, recoveryAttempts: down.retries + up.retries)
+                    server: config.measurementServer.name, mode: config.mode.rawValue, connections: config.connections, recoveryAttempts: down.retries + up.retries, placeLabel: placeLabel, experimentID: experimentID, budgetMB: config.budgetMB, serverID: config.measurementServer.id)
                 awards = RecordBook.achievements(for: completed, previous: store.results)
                 store.add(completed)
                 result = completed; phase = .complete; liveSpeed = down.mbps; progress = 1

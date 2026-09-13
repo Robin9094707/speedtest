@@ -42,6 +42,39 @@ final class AppStore: ObservableObject {
     func add(_ result: SpeedResult) { commit([result] + results) }
     func remove(_ id: UUID) { commit(results.filter { $0.id != id }) }
     func removeAll() { commit([]) }
+    func toggleFavorite(_ id: UUID) {
+        var updated = results
+        guard let index = updated.firstIndex(where: { $0.id == id }) else { return }
+        updated[index].favorite = !(updated[index].favorite ?? false)
+        commit(updated)
+    }
+    func updateTags(_ id: UUID, text: String) {
+        var updated = results
+        guard let index = updated.firstIndex(where: { $0.id == id }) else { return }
+        let tags = text.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40)) }.filter { !$0.isEmpty }
+        updated[index].tags = Array(Set(tags)).sorted().prefix(12).map { $0 }
+        commit(updated)
+    }
+    func readImport(_ url: URL) throws -> [SpeedResult] {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= 40_000_000 else { throw ImportIssue.invalid }
+        let data = try Data(contentsOf: url)
+        guard data.count <= 40_000_000 else { throw ImportIssue.invalid }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let archive = try decoder.decode(Archive.self, from: data)
+        guard archive.version == 1, archive.results.count <= 10_000,
+              archive.results.allSatisfy({ $0.validForImport }) else { throw ImportIssue.invalid }
+        var seen = Set(results.map(\.id))
+        return archive.results.filter { seen.insert($0.id).inserted }
+    }
+    func mergeImport(_ incoming: [SpeedResult]) {
+        var seen = Set(results.map(\.id))
+        let added = incoming.filter { $0.validForImport && seen.insert($0.id).inserted }
+        commit((results + added).sorted { $0.date > $1.date })
+    }
     func renameNetwork(key: String, name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }

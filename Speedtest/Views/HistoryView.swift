@@ -6,10 +6,22 @@ struct HistoryView: View {
     @State private var filter = "Alle"
     @State private var selected: SpeedResult?
     @State private var deletion: SpeedResult?
+    @State private var favoritesOnly = false
+    @State private var sort = "Neueste"
+    @State private var days = 0
+    @State private var compare = false
     private var filtered: [SpeedResult] {
-        store.results.filter {
+        let cutoff = days == 0 ? Date.distantPast : Calendar.current.date(byAdding: .day, value: -days, to: Date())!
+        let values = store.results.filter {
             (filter == "Alle" || $0.network.kind.rawValue == filter) &&
-            (query.isEmpty || $0.network.name.localizedCaseInsensitiveContains(query) || $0.note.localizedCaseInsensitiveContains(query))
+            (!favoritesOnly || $0.favorite == true) && $0.date >= cutoff &&
+            (query.isEmpty || $0.searchText.localizedCaseInsensitiveContains(query))
+        }
+        switch sort {
+        case "Download": return values.sorted { $0.download > $1.download }
+        case "Upload": return values.sorted { $0.upload > $1.upload }
+        case "Niedrigster Ping": return values.sorted { $0.ping < $1.ping }
+        default: return values.sorted { $0.date > $1.date }
         }
     }
     var body: some View {
@@ -29,6 +41,11 @@ struct HistoryView: View {
                                 ForEach(filtered) { result in
                                     Button { selected = result } label: { ResultRow(result: result, unit: store.settings.unit) }
                                         .buttonStyle(.plain).listRowBackground(Color.clear)
+                                        .swipeActions(edge: .leading) {
+                                            Button { store.toggleFavorite(result.id) } label: {
+                                                Label(result.favorite == true ? "Entfernen" : "Favorit", systemImage: "star.fill")
+                                            }.tint(.orange)
+                                        }
                                         .swipeActions { Button("Löschen", role: .destructive) { deletion = result } }
                                 }
                             } header: { Text("\(filtered.count) Messungen") }
@@ -37,7 +54,25 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("Dein Verlauf")
-            .searchable(text: $query, prompt: "Netz oder Notiz suchen")
+            .searchable(text: $query, prompt: "Netz, Ort, Server, Tag oder Notiz")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { compare = true } label: { Label("Vergleichen", systemImage: "arrow.left.arrow.right") }
+                        .disabled(store.results.count < 2)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Toggle("Nur Favoriten", isOn: $favoritesOnly)
+                        Picker("Sortierung", selection: $sort) {
+                            ForEach(["Neueste", "Download", "Upload", "Niedrigster Ping"], id: \.self) { Text($0).tag($0) }
+                        }
+                        Picker("Zeitraum", selection: $days) {
+                            Text("Alle Zeiten").tag(0); Text("7 Tage").tag(7); Text("30 Tage").tag(30); Text("90 Tage").tag(90)
+                        }
+                    } label: { Image(systemName: favoritesOnly || days != 0 || sort != "Neueste" ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle") }
+                }
+            }
+            .sheet(isPresented: $compare) { ComparisonSelectionView() }
             .sheet(item: $selected) { ResultDetailView(resultID: $0.id) }
             .alert("Speedtest löschen?", isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } })) {
                 Button("Nein", role: .cancel) { deletion = nil }
@@ -57,6 +92,7 @@ struct ResultRow: View {
             HStack {
                 Label(result.network.name, systemImage: result.network.kind.symbol).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer()
+                if result.favorite == true { Image(systemName: "star.fill").foregroundStyle(.yellow) }
                 if result.location != nil { Image(systemName: "mappin.circle.fill").foregroundStyle(.cyan) }
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
             }
@@ -70,12 +106,17 @@ struct ResultRow: View {
                 Spacer()
                 Text("\(SpeedMath.number(result.ping)) ms")
             }.font(.caption).foregroundStyle(.secondary)
+            if let place = result.placeLabel { Label(place, systemImage: "mappin.and.ellipse").font(.caption.weight(.semibold)).foregroundStyle(.cyan) }
+            if let tags = result.tags, !tags.isEmpty {
+                Text(tags.map { "#" + $0 }.joined(separator: "  ")).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
             if !result.note.isEmpty { Label(result.note, systemImage: "note.text").font(.caption).foregroundStyle(.secondary).lineLimit(2) }
         }.padding(.vertical, 10).accessibilityElement(children: .combine)
     }
 }
 
 struct RecordsView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: AppStore
     var body: some View {
         NavigationStack {
@@ -114,6 +155,7 @@ struct RecordsView: View {
                     }
                 }
             }.navigationTitle("Deine Rekorde")
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Fertig") { dismiss() } } }
         }
     }
     private func best(_ label: String, _ speed: Double, _ color: Color) -> some View {

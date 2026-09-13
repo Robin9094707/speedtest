@@ -103,6 +103,9 @@ private struct ResultShareCard: View {
                 Text("Dein Netz. In Bestform.").font(.system(size: 29, weight: .bold, design: .rounded))
                 Label(result.network.name, systemImage: result.network.kind.symbol)
                     .font(.system(size: 18, weight: .semibold)).lineLimit(3)
+                if let place = result.placeLabel {
+                    Label(place, systemImage: "mappin.and.ellipse").font(.system(size: 14, weight: .semibold)).foregroundStyle(cyan)
+                }
                 Text(result.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
             }

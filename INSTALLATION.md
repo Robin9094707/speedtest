@@ -34,3 +34,12 @@ Wenn du einen Fehler meldest: iPhone-Modell, iOS-Version, App-Buildnummer, Sidel
 ## Ergebnisbild teilen
 
 Nach einem Test „Ergebnis als Bild teilen“ wählen oder ein Ergebnis im Verlauf öffnen. Die Vorschau wird aus den gespeicherten Messwerten als Bild in hoher Auflösung erzeugt. Sie enthält Download, Upload, HTTP-Ping, Jitter, Dauer, Datenmengen, Live-Spitzen und Messserver. Ein gespeicherter Standort erscheint als Koordinaten und, wenn Apple die Karte laden kann, als Kartenausschnitt. Standort und Notiz lassen sich vor dem Teilen ausschalten. „Bild teilen“ öffnet das iOS-Menü für Nachrichten, WhatsApp, AirDrop und weitere Apps. Es wird keine Nachricht automatisch verschickt.
+
+## Neu in Version 2.0
+
+- **Einblicke** bündelt Statistik, Rekorde, A/B-Vergleich, Router-Labor und Transferzeit-Rechner.
+- **Verlauf** bietet Favoriten, Tags, Zeitfilter und Sortierungen. Tags im Testergebnis bearbeiten, danach „Notiz und Tags speichern“ wählen.
+- **Router-Labor** vergleicht benannte Plätze in selbst gestarteten Runden. Das Datenlimit gilt für jeden einzelnen Test.
+- **Karte**: oben rechts Favoriten, Zeitraum, Uploadanzeige und Satellitenbild wählen.
+- **Wiederherstellen**: in den Einstellungen einen früher exportierten JSON-Verlauf auswählen, Vorschau ansehen und ergänzen. Bestehende Tests werden nicht überschrieben.
+- Bestehende App-Daten bleiben bei einem normalen Update mit derselben App-Kennung und passenden Signierung erhalten. Die App nicht vorher löschen, wenn du deine lokalen Daten behalten möchtest.

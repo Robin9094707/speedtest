@@ -7,8 +7,16 @@ struct TestMapView: View {
     @State private var selectedID: UUID?
     @State private var selected: SpeedResult?
     @State private var filter = "Alle"
+    @State private var favorites = false
+    @State private var satellite = false
+    @State private var upload = false
+    @State private var days = 0
     private var mapped: [SpeedResult] {
-        store.results.filter { $0.location != nil && (filter == "Alle" || $0.network.kind.rawValue == filter) }
+        store.results.filter {
+            $0.location != nil && (filter == "Alle" || $0.network.kind.rawValue == filter)
+                && (!favorites || $0.favorite == true)
+                && (days == 0 || $0.date >= Calendar.current.date(byAdding: .day, value: -days, to: Date())!)
+        }
     }
     var body: some View {
         NavigationStack {
@@ -16,7 +24,7 @@ struct TestMapView: View {
                 Map(position: $position, selection: $selectedID) {
                     ForEach(mapped) { result in
                         if let location = result.location {
-                            Marker("↓ \(store.settings.unit.format(result.download)) \(store.settings.unit.rawValue)",
+                            Marker("\(upload ? "↑" : "↓") \(store.settings.unit.format(upload ? result.upload : result.download)) \(store.settings.unit.rawValue)",
                                    systemImage: result.network.kind.symbol,
                                    coordinate: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude))
                                 .tint(result.network.kind == .cellular ? Palette.upload : .cyan).tag(result.id)
@@ -24,7 +32,7 @@ struct TestMapView: View {
                     }
                     if store.settings.locationEnabled { UserAnnotation() }
                 }
-                .mapStyle(.standard(elevation: .realistic))
+                .mapStyle(satellite ? .hybrid(elevation: .realistic) : .standard(elevation: .realistic))
                 .mapControls { MapCompass(); MapScaleView(); if store.settings.locationEnabled { MapUserLocationButton() } }
                 if mapped.isEmpty {
                     VStack(spacing: 12) {
@@ -36,6 +44,18 @@ struct TestMapView: View {
                 }
             }
             .navigationTitle("Deine Orte").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Toggle("Nur Favoriten", isOn: $favorites)
+                        Toggle("Upload an Pins anzeigen", isOn: $upload)
+                        Toggle("Satellitenansicht", isOn: $satellite)
+                        Picker("Zeitraum", selection: $days) {
+                            Text("Alles").tag(0); Text("7 Tage").tag(7); Text("30 Tage").tag(30)
+                        }
+                    } label: { Image(systemName: "slider.horizontal.3") }
+                }
+            }
             .safeAreaInset(edge: .top) {
                 Picker("Kartenfilter", selection: $filter) {
                     Text("Alle").tag("Alle"); Text("WLAN").tag("WLAN"); Text("Mobilfunk").tag("Mobilfunk")
@@ -52,6 +72,8 @@ struct TestMapView: View {
             .onChange(of: selectedID) { _, id in
                 if let id { selected = store.results.first { $0.id == id } }
             }
+            .onChange(of: favorites) { _, _ in position = .automatic }
+            .onChange(of: days) { _, _ in position = .automatic }
             .onChange(of: filter) { _, _ in position = .automatic }
             .sheet(item: $selected, onDismiss: { selectedID = nil }) { ResultDetailView(resultID: $0.id) }
         }

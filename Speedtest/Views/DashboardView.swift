@@ -27,6 +27,7 @@ struct DashboardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         header
+                        DashboardOverview()
                         compactNetwork
                         VStack(spacing: 0) {
                             HStack {

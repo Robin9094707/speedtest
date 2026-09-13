@@ -6,6 +6,8 @@ struct ResultDetailView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var note = ""
+    @State private var tagsText = ""
+    @State private var compare = false
     @State private var deletePrompt = false
     @State private var share = false
     private var result: SpeedResult? { store.results.first { $0.id == resultID } }
@@ -21,6 +23,14 @@ struct ResultDetailView: View {
                                 Label(result.network.name, systemImage: result.network.kind.symbol).font(.title2.bold())
                                 Text(result.date, format: .dateTime.day().month(.wide).year().hour().minute()).font(.subheadline).foregroundStyle(.secondary)
                             }
+                            HStack {
+                                Button { store.toggleFavorite(resultID) } label: {
+                                    Label(result.favorite == true ? "Gemerkt" : "Merken", systemImage: result.favorite == true ? "star.fill" : "star")
+                                }.tint(.orange)
+                                Spacer()
+                                Button { compare = true } label: { Label("Vergleichen", systemImage: "arrow.left.arrow.right") }.disabled(store.results.count < 2)
+                            }.font(.subheadline.weight(.semibold))
+                            if let place = result.placeLabel { Label(place, systemImage: "mappin.and.ellipse").font(.headline).foregroundStyle(.cyan) }
                             HStack(spacing: 12) {
                                 MetricTile(title: "Download", symbol: "arrow.down", value: store.settings.unit.format(result.download), unit: store.settings.unit.rawValue, color: .cyan)
                                 MetricTile(title: "Upload", symbol: "arrow.up", value: store.settings.unit.format(result.upload), unit: store.settings.unit.rawValue, color: Palette.upload)
@@ -63,8 +73,11 @@ struct ResultDetailView: View {
                                 Label("Deine Notiz", systemImage: "square.and.pencil").font(.headline)
                                 TextField("Zum Beispiel: Wohnzimmer, Fenster offen …", text: $note, axis: .vertical)
                                     .lineLimit(3...8).accessibilityIdentifier("resultNote")
-                                Button("Notiz speichern") { store.updateNote(resultID, note: note) }
-                                    .disabled(note == result.note).accessibilityIdentifier("saveNote")
+                                TextField("Tags, durch Kommas getrennt", text: $tagsText)
+                                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                                Text("Zum Beispiel: Fenster, 5G, abends · maximal 12 Tags").font(.caption).foregroundStyle(.secondary)
+                                Button("Notiz und Tags speichern") { saveMetadata() }
+                                    .disabled(note == result.note && tagsText == (result.tags ?? []).joined(separator: ", ")).accessibilityIdentifier("saveNote")
                             }.padding(20).glassPanel()
                             Text("HTTP-Ping misst die Antwortzeit kleiner HTTPS-Anfragen einschließlich Serververarbeitung. Die Bandbreite ist ein Durchschnitt der Nutzdatenrate; kurze Live-Spitzen sind keine Rekorde. Serverauslastung, WLAN und VPN können das Ergebnis beeinflussen.")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -79,10 +92,11 @@ struct ResultDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button { share = true } label: { Image(systemName: "square.and.arrow.up") }.disabled(result == nil) }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") { if let result, note != result.note { store.updateNote(resultID, note: note) }; dismiss() }.fontWeight(.semibold)
+                    Button("Fertig") { saveMetadata(); dismiss() }.fontWeight(.semibold)
                 }
             }
-            .task { note = result?.note ?? "" }
+            .task { note = result?.note ?? ""; tagsText = (result?.tags ?? []).joined(separator: ", ") }
+            .sheet(isPresented: $compare) { ComparisonSelectionView(initialID: resultID) }
             .sheet(isPresented: $share) {
                 if let r = result { ResultShareView(result: shareSnapshot(r)) }
             }
@@ -91,6 +105,11 @@ struct ResultDetailView: View {
                 Button("Ja, löschen", role: .destructive) { store.remove(resultID); if store.results.allSatisfy({ $0.id != resultID }) { dismiss() } }
             } message: { Text("Diese Messung wird aus Verlauf, Karte und Rekorden entfernt.") }
         }
+    }
+    private func saveMetadata() {
+        guard let result else { return }
+        if note != result.note { store.updateNote(resultID, note: note) }
+        if tagsText != (result.tags ?? []).joined(separator: ", ") { store.updateTags(resultID, text: tagsText) }
     }
     private func shareSnapshot(_ result: SpeedResult) -> SpeedResult {
         var snapshot = result

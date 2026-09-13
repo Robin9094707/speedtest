@@ -9,7 +9,7 @@ final class SpeedtestUITests: XCTestCase {
         let dashboard = XCTAttachment(screenshot: app.screenshot())
         dashboard.name = "01-Speedtest-Liquid-Glass"; dashboard.lifetime = .keepAlways
         add(dashboard)
-        for (tab, title) in [("Verlauf", "Dein Verlauf"), ("Karte", "Deine Orte"), ("Rekorde", "Deine Rekorde"), ("Einstellungen", "Einstellungen")] {
+        for (tab, title) in [("Verlauf", "Dein Verlauf"), ("Karte", "Deine Orte"), ("Einblicke", "Einblicke"), ("Einstellungen", "Einstellungen")] {
             app.tabBars.buttons[tab].tap()
             XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 8))
             let shot = XCTAttachment(screenshot: app.screenshot())

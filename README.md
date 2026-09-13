@@ -1,4 +1,4 @@
-# RJ Speedtest für iOS
+# RJ Speedtest 2.0 für iOS
 
 [![iOS App · Tests & IPA](https://github.com/Robin9094707/speedtest/actions/workflows/ios.yml/badge.svg)](https://github.com/Robin9094707/speedtest/actions/workflows/ios.yml)
 
@@ -88,7 +88,7 @@ Tests decken Einheiten, Skalen über Gigabit, Latenzstatistik, getrennte Netzide
 ```text
 Speedtest/Models/       Datenmodelle, Statistik, Rekorde
 Speedtest/Services/     Transfers, Standort, Netz, lokale Speicherung
-Speedtest/Views/        Tacho, Verlauf, Karte, Rekorde, Einstellungen
+Speedtest/Views/        Tacho, Verlauf, Karte, Einblicke, Vergleiche, Router-Labor, Einstellungen
 Speedtest/Resources/    Icon, Info.plist, Datenschutz, Entitlements
 Tests/                 Unit- und Transporttests
 UITests/               App-Start, Navigation und Screenshots
@@ -111,3 +111,15 @@ HTTP 403 bedeutet Zugriffsablehnung, ohne die Ursache zu beweisen. Die App versu
 Im Vordergrund wird die WLAN-Erkennung alle drei Sekunden sowie bei Verbindungs- und Berechtigungswechseln aktualisiert. Ein eigener Name ändert den stabilen Rekordschlüssel nicht. Bestehende Ergebnisse mit diesem Schlüssel werden beim Umbenennen angepasst. Ohne Freigabe einer Kennung durch iOS ist automatische Wiedererkennung nicht möglich. Das mitgelieferte Wi-Fi-Entitlement muss beim Sideloading durch ein geeignetes Provisioningprofil autorisiert werden.
 
 Der Bildexport erzeugt mit SwiftUI ImageRenderer eine 1.500 Pixel breite Ergebniskarte. Das iOS-Teilen-Menü erhält das Bild direkt. Netzname, echte Messwerte, Datenmengen, Messprofil, Server und getrennt beschriftete Live-Spitzen stehen auf der Karte. Gespeicherte Koordinaten sind offline verfügbar; ein optionaler Apple-MapKit-Snapshot ergänzt die Vorschau, ohne das Teilen beim Laden zu blockieren. Standort und Notiz sind vor dem Teilen wählbar. Nachrichten werden ausschließlich über die vom Nutzer bediente Ziel-App verschickt.
+
+## Version 2.0: Einblicke und Werkzeuge
+
+Die bisherige Rekorde-Registerkarte wird zu **Einblicke**. Dort bleiben die Rekorde erreichbar; hinzu kommen Statistik, A/B-Vergleich, Router-Labor und Transferzeit-Rechner. Die vollständigen Neuerungen stehen in [CHANGELOG.md](CHANGELOG.md).
+
+**Router-Labor:** Einblicke → Router-Standort finden → Platz benennen → bewusst einen Test starten. Weitere Plätze in derselben Runde messen. Server, Profil und Datenlimit müssen gleich bleiben; Router-Runden starten keine Tests automatisch. Runden werden anhand der Ergebnis-IDs lokal wiedergefunden. Messwerte zeigen die gesamte Strecke inklusive WLAN und Messserver, nicht nur die Mobilfunkverbindung des Routers.
+
+**Verlauf:** Nach rechts wischen oder im Ergebnis den Stern wählen, um einen Favoriten zu markieren. Tags im Ergebnis mit Kommas trennen. Das Filtermenü erlaubt Zeitfenster, Favoriten und Sortierung nach Download, Upload oder Ping. Der A/B-Vergleich verwendet A als Basis für Prozentwerte; bei einer Nullbasis bleibt der Prozentvergleich aus.
+
+**Wiederherstellen:** Einstellungen → JSON-Verlauf wiederherstellen → Datei wählen → Vorschau → Messungen hinzufügen. Der Import akzeptiert die exportierte Version 1 des Ergebnisarchivs mit ISO-8601-Daten. Neue optionale Ergebnisfelder halten ältere Exporte kompatibel. Vorhandene IDs werden nicht überschrieben; die aktuellen Einstellungen bleiben erhalten. Nutzdaten und Stichproben werden vor dem Hinzufügen auf Format, Grenzen und endliche Zahlen geprüft. Der Import überträgt keine Daten an einen Server.
+
+**Auswertung:** Mediane und Zeitverläufe werden aus gespeicherten Ergebnissen berechnet. Ein Netz-/Zeitraumfilter ist keine kontinuierliche Messung des Anschlusses. Einblicke zählen auch Wiederholungsdaten gespeicherter erfolgreicher Tests, aber keine vollständig abgebrochenen Tests oder Protokolldaten. Transferzeiten sind mathematische Schätzungen bei konstantem Tempo und keine Zusage für echte Downloads.

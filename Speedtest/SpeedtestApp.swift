@@ -33,7 +33,7 @@ struct RootView: View {
             DashboardView().tabItem { Label("Speedtest", systemImage: "speedometer") }.tag(0)
             HistoryView().tabItem { Label("Verlauf", systemImage: "clock.arrow.circlepath") }.tag(1)
             TestMapView().tabItem { Label("Karte", systemImage: "map") }.tag(2)
-            RecordsView().tabItem { Label("Rekorde", systemImage: "trophy") }.tag(3)
+            InsightsView().tabItem { Label("Einblicke", systemImage: "chart.xyaxis.line") }.tag(3)
             SettingsView().tabItem { Label("Einstellungen", systemImage: "slider.horizontal.3") }.tag(4)
         }
         .sheet(isPresented: $welcomeNeeded) {
