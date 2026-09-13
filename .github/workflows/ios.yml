@@ -1,0 +1,114 @@
+name: iOS App · Tests & IPA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: iPhone prüfen und IPA bauen
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode und Projekt vorbereiten
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          python3 scripts/make_icon.py
+          python3 scripts/generate_project.py
+          mkdir -p build
+          xcrun simctl list devices available -j > build/simulators.json
+          python3 scripts/select_simulator.py >> "$GITHUB_ENV"
+
+      - name: Unit-Tests und iPhone-Oberfläche prüfen
+        run: |
+          set -euo pipefail
+          xcodebuild test -quiet \
+            -project Speedtest.xcodeproj -scheme Speedtest \
+            -configuration Debug -destination "id=$SIMULATOR_ID" \
+            -parallel-testing-enabled NO \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/Tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee build/tests.log
+
+      - name: ARM64-App archivieren
+        run: |
+          set -euo pipefail
+          xcodebuild archive -quiet \
+            -project Speedtest.xcodeproj -scheme Speedtest \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Speedtest.xcarchive \
+            -derivedDataPath build/DeviceDerivedData \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee build/archive.log
+
+      - name: IPA paketieren und prüfen
+        run: |
+          set -euo pipefail
+          mkdir -p build/package/Payload build/artifacts
+          cp -R build/Speedtest.xcarchive/Products/Applications/Speedtest.app build/package/Payload/
+          cd build/package
+          zip -qry ../artifacts/RJ-Speedtest.ipa Payload
+          cd ../..
+          python3 scripts/validate_ipa.py build/artifacts/RJ-Speedtest.ipa
+          lipo -info build/package/Payload/Speedtest.app/Speedtest
+          cp INSTALLATION.md build/artifacts/INSTALLATION.md
+          cp Speedtest/Resources/Speedtest.entitlements build/artifacts/Speedtest.entitlements
+          cd build/artifacts
+          shasum -a 256 RJ-Speedtest.ipa > SHA256SUMS.txt
+
+      - name: IPA zum Download bereitstellen
+        id: ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: RJ-Speedtest-IPA
+          path: build/artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Screenshots exportieren
+        if: always()
+        run: |
+          if [ -d build/Tests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/screenshots || true
+          fi
+
+      - name: Testberichte und Screenshots sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Testberichte-und-Screenshots
+          path: |
+            build/*.log
+            build/Tests.xcresult
+            build/screenshots/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Build-Zusammenfassung
+        if: success()
+        env:
+          IPA_URL: ${{ steps.ipa.outputs.artifact-url }}
+        run: |
+          python3 - <<'PY'
+          import os
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('## RJ Speedtest ist gebaut\n\n')
+              f.write(f"[IPA herunterladen]({os.environ['IPA_URL']})\n\n")
+              f.write('Native ARM64-App ab iOS 17. Unit- und UI-Tests bestanden.\n\n')
+              f.write('**Die IPA ist unsigniert.** Vor der Installation mit einem eigenen Apple-Profil signieren, z. B. per Sideloading. Hinweise stehen in INSTALLATION.md.\n')
+          PY
