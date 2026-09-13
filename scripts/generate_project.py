@@ -73,7 +73,7 @@ for name, folder, product_type, extension in [
                   includeInIndex="0", path=f"{name}.{extension}", sourceTree="BUILT_PRODUCTS_DIR")
     product_refs.append(product)
     settings = dict(common, PRODUCT_NAME="$(TARGET_NAME)", PRODUCT_BUNDLE_IDENTIFIER="de.robinjuhas.speedtest" + ("" if name == "Speedtest" else "." + name),
-                    CURRENT_PROJECT_VERSION="1", MARKETING_VERSION="2.0.0", GENERATE_INFOPLIST_FILE="YES",
+                    CURRENT_PROJECT_VERSION="1", MARKETING_VERSION="3.0.0", GENERATE_INFOPLIST_FILE="YES",
                     LD_RUNPATH_SEARCH_PATHS=["$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks"])
     if name == "Speedtest":
         settings.update(INFOPLIST_FILE="Speedtest/Resources/Info.plist", GENERATE_INFOPLIST_FILE="NO",

@@ -27,7 +27,6 @@ struct DashboardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         header
-                        DashboardOverview()
                         compactNetwork
                         VStack(spacing: 0) {
                             HStack {
@@ -47,8 +46,12 @@ struct DashboardView: View {
                                     .padding(.horizontal, 24).padding(.bottom, 20)
                             }
                         }.glassPanel(radius: 32)
+                            .overlay(RoundedRectangle(cornerRadius: 32).strokeBorder(LinearGradient(colors: [accent.opacity(0.35), .clear, Palette.upload.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1))
 
                         startControl
+                        if let result = engine.result, store.settings.dashboardScore {
+                            QualityCard(result: result).id(result.id)
+                        }
                         Button { showServers = true } label: {
                             HStack {
                                 Image(systemName: "server.rack")
@@ -106,6 +109,7 @@ struct DashboardView: View {
                                 Text("Momentane Rate · Mbit/s").font(.caption2).foregroundStyle(.secondary)
                             }.padding(20).glassPanel()
                         }
+                        DashboardOverview()
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "globe.europe.africa").foregroundStyle(accent)
                             VStack(alignment: .leading, spacing: 5) {

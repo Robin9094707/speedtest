@@ -120,6 +120,17 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
+                Section {
+                    Picker("Konfetti", selection: $store.settings.celebrationStyle) {
+                        ForEach(CelebrationStyle.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Toggle("RJ Score auf dem Startbildschirm", isOn: $store.settings.dashboardScore)
+                    Text("Ein gutes Ergebnis bedeutet mindestens 75 RJ-Punkte. Konfetti läuft einmal kurz nach einem abgeschlossenen Test. „Animationen“ und „Bewegung reduzieren“ werden berücksichtigt.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Gaming, Streaming und Videoanrufe sind Schätzungen aus den Messwerten. Die genaue Berechnung findest du bei jedem Ergebnis unter „Was bedeuten die Punkte?“.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } header: { Text("Punkte & Effekte") }
+
                 Section("Dein Look") {
                     Picker("Einheit", selection: $store.settings.unit) { ForEach(SpeedUnit.allCases) { Text($0.rawValue).tag($0) } }
                     Picker("Tacho-Skala", selection: $store.settings.gaugeScale) {
@@ -129,7 +140,7 @@ struct SettingsView: View {
                         ForEach(["System", "Dunkel", "Hell"], id: \.self) { Text($0).tag($0) }
                     }
                     Picker("Akzentfarbe", selection: $store.settings.accent) {
-                        ForEach(["Polarlicht", "Ozean", "Violett", "Sonnenuntergang"], id: \.self) { Text($0).tag($0) }
+                        ForEach(["Polarlicht", "Ozean", "Violett", "Sonnenuntergang", "Jade", "Roségold", "Elektrisch"], id: \.self) { Text($0).tag($0) }
                     }
                     Toggle("Animationen", isOn: $store.settings.animations)
                     Toggle("Haptisches Feedback", isOn: $store.settings.haptics)
@@ -170,7 +181,7 @@ struct SettingsView: View {
                         .disabled(store.results.isEmpty || engine.isRunning)
                 } header: { Text("Deine Daten") } footer: { Text("Exporte enthalten auch gespeicherte Standorte und Notizen. Teile sie nur, wenn du diese Angaben weitergeben möchtest.") }
 
-                Section("Version 2.0") {
+                Section("Version 3.0") {
                     Button("Alle Neuerungen ansehen") { showNews = true }
                     NavigationLink("JSON-Verlauf wiederherstellen") { ImportView() }.disabled(engine.isRunning)
                 }
@@ -187,7 +198,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Einstellungen")
-            .sheet(isPresented: $showNews) { VersionTwoView() }
+            .sheet(isPresented: $showNews) { VersionThreeView() }
             .sheet(isPresented: $showServers) { ServerSelectionView() }
             .alert("Alle Messungen löschen?", isPresented: $deleteAll) {
                 Button("Abbrechen", role: .cancel) {}

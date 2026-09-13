@@ -59,6 +59,10 @@ struct ComparisonDetailView: View {
                 Label("A · \(first.shortLabel)", systemImage: first.network.kind.symbol).font(.headline)
                 Label("B · \(second.shortLabel)", systemImage: second.network.kind.symbol).font(.headline)
                 Button("A und B tauschen") { swapped.toggle() }
+                if QualityProfile(first).available && QualityProfile(second).available {
+                    comparison("RJ Score", Double(QualityProfile(first).points), Double(QualityProfile(second).points), unit: "Punkte", higherIsBetter: true)
+                    Text("RJ-Modell 1 · Vergleich der App-Schätzungen, keine zusätzliche Messung.").font(.caption).foregroundStyle(.secondary)
+                }
                 comparison("Download", first.download, second.download, unit: "Mbit/s", higherIsBetter: true)
                 comparison("Upload", first.upload, second.upload, unit: "Mbit/s", higherIsBetter: true)
                 comparison("HTTP-Ping", first.ping, second.ping, unit: "ms", higherIsBetter: false)

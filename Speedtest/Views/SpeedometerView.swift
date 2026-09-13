@@ -15,16 +15,22 @@ struct SpeedometerView: View, Animatable {
             let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height * 0.49)
             let radius = side * 0.44
             ZStack {
-                Circle().fill(color.opacity(0.065)).frame(width: radius * 1.7).blur(radius: 15).position(center)
+                Circle().fill(RadialGradient(colors: [color.opacity(0.15), color.opacity(0.015), .clear], center: .center, startRadius: 0, endRadius: radius))
+                    .frame(width: radius * 2.05, height: radius * 2.05).position(center)
                 Canvas { context, _ in
                     let fraction = min(1, max(0, value / maximum))
+                    var halo = Path()
+                    halo.addArc(center: center, radius: radius + 9, startAngle: .degrees(135), endAngle: .degrees(405), clockwise: false)
+                    context.stroke(halo, with: .color(color.opacity(0.12)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
                     var track = Path()
                     track.addArc(center: center, radius: radius, startAngle: .degrees(135), endAngle: .degrees(405), clockwise: false)
                     context.stroke(track, with: .color(.gray.opacity(0.16)), style: StrokeStyle(lineWidth: 10, lineCap: .round))
                     if fraction > 0 {
                         var active = Path()
                         active.addArc(center: center, radius: radius, startAngle: .degrees(135), endAngle: .degrees(135 + 270 * fraction), clockwise: false)
-                        context.stroke(active, with: .linearGradient(Gradient(colors: [color.opacity(0.5), color, Palette.upload]), startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: proxy.size.width, y: 0)), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        var glow = context
+                        glow.addFilter(.shadow(color: color.opacity(0.45), radius: 7))
+                        glow.stroke(active, with: .linearGradient(Gradient(colors: [color.opacity(0.5), color, Palette.upload]), startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: proxy.size.width, y: 0)), style: StrokeStyle(lineWidth: 10, lineCap: .round))
                     }
                     for index in 0...50 {
                         let angle = (135 + Double(index) / 50 * 270) * .pi / 180
@@ -42,13 +48,15 @@ struct SpeedometerView: View, Animatable {
                         }
                     }
                     let angle = (135 + 270 * fraction) * .pi / 180
+                    let tip = point(center, radius, angle)
+                    context.fill(Path(ellipseIn: CGRect(x: tip.x - 4, y: tip.y - 4, width: 8, height: 8)), with: .color(color))
                     var needle = Path()
                     needle.move(to: point(center, radius * 0.64, angle))
                     needle.addLine(to: point(center, radius * 0.87, angle))
                     context.stroke(needle, with: .color(color), style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 }
                 VStack(spacing: 4) {
-                    Text(unit.format(max(0, value))).font(.system(size: 55, weight: .semibold, design: .rounded))
+                    Text(unit.format(max(0, value))).font(.system(size: 56, weight: .bold, design: .rounded))
                         .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
                     Text(unit.rawValue).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
                     Text(subtitle.uppercased()).font(.system(size: 10, weight: .bold)).tracking(2).foregroundStyle(color).padding(.top, 12)

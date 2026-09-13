@@ -43,3 +43,7 @@ Nach einem Test „Ergebnis als Bild teilen“ wählen oder ein Ergebnis im Verl
 - **Karte**: oben rechts Favoriten, Zeitraum, Uploadanzeige und Satellitenbild wählen.
 - **Wiederherstellen**: in den Einstellungen einen früher exportierten JSON-Verlauf auswählen, Vorschau ansehen und ergänzen. Bestehende Tests werden nicht überschrieben.
 - Bestehende App-Daten bleiben bei einem normalen Update mit derselben App-Kennung und passenden Signierung erhalten. Die App nicht vorher löschen, wenn du deine lokalen Daten behalten möchtest.
+
+## Neu in Version 3.0
+
+Nach einem Test zeigt die App den **RJ Score**. „Was bedeuten die Punkte?“ erklärt die Kategorien und Grenzen. Gaming ist eine Schätzung aus HTTP-Ping, Jitter und Bandbreite und misst nicht deinen Spielserver. In den Einstellungen unter **Punkte & Effekte** wählst du den Konfetti-Modus und die Score-Anzeige auf dem Startbildschirm. Bei deaktivierten Animationen oder reduzierter Bewegung gibt es kein Konfetti. Neue Farben stehen unter **Dein Look → Akzentfarbe** bereit. Im Ergebnisbild kannst du die Alltagsbewertung separat ausschalten.

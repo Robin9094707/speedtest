@@ -1,4 +1,4 @@
-# RJ Speedtest 2.0 für iOS
+# RJ Speedtest 3.0 für iOS
 
 [![iOS App · Tests & IPA](https://github.com/Robin9094707/speedtest/actions/workflows/ios.yml/badge.svg)](https://github.com/Robin9094707/speedtest/actions/workflows/ios.yml)
 
@@ -123,3 +123,15 @@ Die bisherige Rekorde-Registerkarte wird zu **Einblicke**. Dort bleiben die Reko
 **Wiederherstellen:** Einstellungen → JSON-Verlauf wiederherstellen → Datei wählen → Vorschau → Messungen hinzufügen. Der Import akzeptiert die exportierte Version 1 des Ergebnisarchivs mit ISO-8601-Daten. Neue optionale Ergebnisfelder halten ältere Exporte kompatibel. Vorhandene IDs werden nicht überschrieben; die aktuellen Einstellungen bleiben erhalten. Nutzdaten und Stichproben werden vor dem Hinzufügen auf Format, Grenzen und endliche Zahlen geprüft. Der Import überträgt keine Daten an einen Server.
 
 **Auswertung:** Mediane und Zeitverläufe werden aus gespeicherten Ergebnissen berechnet. Ein Netz-/Zeitraumfilter ist keine kontinuierliche Messung des Anschlusses. Einblicke zählen auch Wiederholungsdaten gespeicherter erfolgreicher Tests, aber keine vollständig abgebrochenen Tests oder Protokolldaten. Transferzeiten sind mathematische Schätzungen bei konstantem Tempo und keine Zusage für echte Downloads.
+
+## Version 3.0: Design, RJ Score und Konfetti
+
+Neue Ergebnis-Karten, ein beleuchteter Tacho, die Akzentfarben Jade/Roségold/Elektrisch und animierte Bewertungsbalken ergänzen das native Glasdesign. Die bewährte Glättung des Tachos bleibt erhalten. Der Startknopf steht vor der Versionsübersicht; der Score erscheint nach einer abgeschlossenen Messung direkt darunter.
+
+**RJ Score (RJ-Modell 1)** ist eine ausdrücklich app-eigene Heuristik aus den vorhandenen Messwerten. Gaming gewichtet HTTP-Ping mit 65 %, Jitter mit 25 % und eine gedeckelte Bandbreitenreserve mit 10 %. Die Reserve begrenzt den Gaming-Wert. Streaming gewichtet Download mit 90 % und Jitter mit 10 %, begrenzt durch die Download-Punkte. Videoanrufe kombinieren beidseitige Bandbreitenreserve (60 %), Ping (25 %) und Jitter (15 %), ebenfalls durch die Reserve begrenzt. Download- und Upload-Punkte folgen eigenen monotonen, stückweise linearen Kurven. Alle Stützpunkte, Grenzen und Formeln sind unter „Was bedeuten die Punkte?“ und in `Speedtest/Models/QualityScore.swift` sichtbar.
+
+Kategorien reichen von 1 bis 10. Der Gesamtscore ist der gewichtete Durchschnitt × 10 (Gaming 30 %, Streaming 20 %, Videoanrufe 20 %, Downloads/Uploads je 15 %), gerundet auf ganze Punkte. Bei fehlender vollständiger Messbasis gibt es keine Bewertung. Alte und neue gespeicherte Tests werden mit demselben Modell bewertet. Es gibt keine zusätzlichen Lasttests, keinen Bonus für viele Tests und keine erfundenen Messwerte. Spielserver-Latenz, Paketverlust, Bufferbloat, Auflösung/Codec und Zahl aktiver Geräte sind nicht gemessen und werden nicht als bekannte Tatsachen dargestellt. Gute Punkte garantieren keine störungsfreie Sitzung.
+
+**Konfetti** erscheint einmal für maximal 3,4 Sekunden nach einem neu abgeschlossenen, gespeicherten Test, wenn mindestens 75 Gesamtpunkte oder ein Netzrekord erreicht wurden. In den Einstellungen lässt es sich auf Netzrekorde beschränken oder ausschalten. Der Effekt läuft nicht beim Öffnen alter Ergebnisse, fängt keine Berührungen ab und stoppt beim Verlassen des Vordergrunds. „Animationen aus“ und iOS „Bewegung reduzieren“ deaktivieren ihn.
+
+Der Score erscheint in Ergebnissen, Verlauf, A/B-Vergleich, Router-Labor und als gefilterter Kategorie-Median in den Einblicken. Im Bildexport kann er separat ausgeblendet werden; die Grafik kennzeichnet ihn ebenfalls als Schätzung. Einstellungen aus früheren Versionen behalten kompatible Standardwerte.

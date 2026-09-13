@@ -31,6 +31,7 @@ struct ResultDetailView: View {
                                 Button { compare = true } label: { Label("Vergleichen", systemImage: "arrow.left.arrow.right") }.disabled(store.results.count < 2)
                             }.font(.subheadline.weight(.semibold))
                             if let place = result.placeLabel { Label(place, systemImage: "mappin.and.ellipse").font(.headline).foregroundStyle(.cyan) }
+                            QualityCard(result: result).id(result.id)
                             HStack(spacing: 12) {
                                 MetricTile(title: "Download", symbol: "arrow.down", value: store.settings.unit.format(result.download), unit: store.settings.unit.rawValue, color: .cyan)
                                 MetricTile(title: "Upload", symbol: "arrow.up", value: store.settings.unit.format(result.upload), unit: store.settings.unit.rawValue, color: Palette.upload)

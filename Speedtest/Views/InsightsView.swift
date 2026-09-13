@@ -26,6 +26,7 @@ struct InsightsView: View {
                         EmptyState(symbol: "chart.xyaxis.line", title: "Noch keine Messwerte", message: "Starte einen Test oder ändere Netz und Zeitraum.")
                     } else {
                         summary
+                        QualityInsightsCard(results: filtered)
                         trend
                         networkOverview
                     }

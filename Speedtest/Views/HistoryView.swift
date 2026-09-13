@@ -92,6 +92,12 @@ struct ResultRow: View {
             HStack {
                 Label(result.network.name, systemImage: result.network.kind.symbol).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer()
+                if QualityProfile(result).available {
+                    Text("\(QualityProfile(result).points) P").font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .padding(.horizontal, 7).padding(.vertical, 4)
+                        .background(.cyan.opacity(0.12), in: Capsule()).foregroundStyle(.cyan)
+                        .accessibilityLabel("RJ Score \(QualityProfile(result).points) von 100")
+                }
                 if result.favorite == true { Image(systemName: "star.fill").foregroundStyle(.yellow) }
                 if result.location != nil { Image(systemName: "mappin.circle.fill").foregroundStyle(.cyan) }
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)

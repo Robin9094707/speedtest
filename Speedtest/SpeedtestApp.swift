@@ -36,6 +36,7 @@ struct RootView: View {
             InsightsView().tabItem { Label("Einblicke", systemImage: "chart.xyaxis.line") }.tag(3)
             SettingsView().tabItem { Label("Einstellungen", systemImage: "slider.horizontal.3") }.tag(4)
         }
+        .overlay { CelebrationView() }
         .sheet(isPresented: $welcomeNeeded) {
             WelcomeView {
                 welcomeNeeded = false

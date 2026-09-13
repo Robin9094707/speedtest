@@ -6,6 +6,7 @@ struct ResultShareView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var includeLocation = true
     @State private var includeNote = false
+    @State private var includeScores = true
     @State private var mapImage: UIImage?
     @State private var image: UIImage?
     @State private var share = false
@@ -20,6 +21,7 @@ struct ResultShareView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 24))
                             .accessibilityLabel("Vorschau des Ergebnisbilds")
                     } else { ProgressView("Ergebnisbild wird erstellt …") }
+                    Toggle("Alltagsbewertung ins Bild aufnehmen", isOn: $includeScores)
                     if result.location != nil {
                         Toggle("Standort ins Bild aufnehmen", isOn: $includeLocation)
                     }
@@ -66,12 +68,13 @@ struct ResultShareView: View {
                 }
             }
             .onChange(of: includeLocation) { _, _ in render() }
+            .onChange(of: includeScores) { _, _ in render() }
             .onChange(of: includeNote) { _, _ in render() }
             .sheet(isPresented: $share) { if let image { ShareSheet(items: [image]) } }
         }
     }
     @MainActor private func render() {
-        let card = ResultShareCard(result: result, includeLocation: includeLocation, includeNote: includeNote, mapImage: mapImage)
+        let card = ResultShareCard(result: result, includeLocation: includeLocation, includeNote: includeNote, mapImage: mapImage, includeScores: includeScores)
             .environment(\.colorScheme, .dark)
             .environment(\.locale, Locale(identifier: "de_DE"))
             .environment(\.dynamicTypeSize, .medium)
@@ -88,6 +91,7 @@ private struct ResultShareCard: View {
     let includeLocation: Bool
     let includeNote: Bool
     let mapImage: UIImage?
+    let includeScores: Bool
     private let cyan = Color(red: 0.23, green: 0.9, blue: 1)
     private let violet = Color(red: 0.76, green: 0.61, blue: 1)
 
@@ -136,6 +140,9 @@ private struct ResultShareCard: View {
                 row("Wiederholte Lastphasen", String(result.recoveryAttempts ?? 0))
                 row("Messserver", result.server)
             }.padding(18).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
+            if includeScores, QualityProfile(result).available {
+                shareScores
+            }
             if includeLocation, let location = result.location {
                 VStack(alignment: .leading, spacing: 10) {
                     Label("STANDORT BEIM TEST", systemImage: "location.fill")
@@ -164,6 +171,25 @@ private struct ResultShareCard: View {
         .background {
             LinearGradient(colors: [Color(red: 0.025, green: 0.09, blue: 0.15), Color(red: 0.045, green: 0.035, blue: 0.11)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
+    }
+    private var shareScores: some View {
+        let profile = QualityProfile(result)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("RJ SCORE").font(.system(size: 11, weight: .heavy)).tracking(1.5).foregroundStyle(cyan)
+                Spacer()
+                Text("\(profile.points) / 100").font(.system(size: 24, weight: .bold, design: .rounded))
+            }
+            ForEach(profile.ratings) { rating in
+                HStack {
+                    Label(rating.category.rawValue, systemImage: rating.category.symbol)
+                    Spacer()
+                    Text("\(rating.value.formatted(.number.precision(.fractionLength(1)))) / 10").fontWeight(.semibold)
+                }.font(.system(size: 12)).foregroundStyle(.white.opacity(0.85))
+            }
+            Text("App-Schätzung · RJ-Modell 1. Kein Spielserver-, Paketverlust- oder Lastlatenztest.")
+                .font(.system(size: 9)).foregroundStyle(.white.opacity(0.5))
+        }.padding(18).background(LinearGradient(colors: [cyan.opacity(0.12), violet.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 20))
     }
     private func rate(_ label: String, symbol: String, value: Double, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 12) {

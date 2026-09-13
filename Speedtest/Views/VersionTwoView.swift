@@ -1,23 +1,22 @@
 import SwiftUI
 
-struct VersionTwoView: View {
+struct VersionThreeView: View {
     @Environment(\.dismiss) private var dismiss
     private let features: [(String, String, String)] = [
-        ("chart.xyaxis.line", "Einblicke pro Netz", "Median, Zeitverlauf, Datenverbrauch und Geschwindigkeitsspanne mit Netz- und Zeitfiltern."),
-        ("arrow.left.arrow.right", "A / B Vergleich", "Zwei Tests nebeneinander, mit absoluten und prozentualen Unterschieden sowie Angaben zur Vergleichbarkeit."),
-        ("wifi.router", "Router-Labor", "Plätze benennen, selbst messen und die Ergebnisse einer Runde vergleichen. Frühere Runden bleiben abrufbar."),
-        ("star.fill", "Dein organisierter Verlauf", "Favoriten, Tags, Suche nach Server und Ort sowie Sortierung nach Tempo oder Ping."),
-        ("shippingbox", "Transferzeit-Rechner", "Abschätzen, wie lange große Downloads und Uploads mit deinem gemessenen Tempo dauern."),
-        ("square.and.arrow.down", "Messungen wiederherstellen", "JSON-Exporte lokal importieren, Vorschau ansehen und neue Test-IDs ohne Duplikate ergänzen."),
-        ("map", "Mehr Übersicht auf der Karte", "Favoriten und Zeiträume filtern, Upload anzeigen und zur Satellitenansicht wechseln.")
+        ("sparkles", "Dein RJ Score", "Ein animierter Gesamtscore und fünf Alltagsbewertungen von 1 bis 10 – aus den Messwerten jedes Tests."),
+        ("gamecontroller.fill", "Gaming verständlich einordnen", "Ping und Jitter zählen stärker als Downloadtempo. Berechnung und Grenzen sind im Ergebnis nachlesbar."),
+        ("party.popper.fill", "Deine Bestleistung feiern", "Kurzes Konfetti für gute Tests oder Netzrekorde. Einstellbar und mit Rücksicht auf reduzierte Bewegung."),
+        ("circle.hexagongrid.fill", "Ein frischer Glas-Look", "Leuchtende Konturen, ein überarbeiteter Tacho und klare Ergebnis-Karten mit animierten Bewertungsbalken."),
+        ("square.and.arrow.up", "Deine Punkte im Bild", "Auf Wunsch erscheinen Gesamtscore und Einzelbewertungen samt Hinweis zur Schätzung im geteilten Ergebnis."),
+        ("chart.xyaxis.line", "Einblicke mit Alltagswerten", "Sieh typische Gaming-, Streaming- und Transferbewertungen pro Netz und Zeitraum. Die Werkzeuge aus Version 2 bleiben erhalten.")
     ]
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    Text("RJ SPEEDTEST 2.0").font(.caption.bold()).tracking(3).foregroundStyle(.cyan)
-                    Text("Mehr als\neine schnelle Zahl.").font(.system(size: 38, weight: .bold, design: .rounded))
-                    Text("Dein Netz verstehen – und gute Messungen wiederfinden.").font(.title3).foregroundStyle(.secondary)
+                    Text("RJ SPEEDTEST 3.0").font(.caption.bold()).tracking(3).foregroundStyle(.cyan)
+                    Text("Dein Netz.\nMit Wow-Moment.").font(.system(size: 38, weight: .bold, design: .rounded))
+                    Text("Echte Messwerte. Verständliche Punkte. Ein Ergebnis, das sich sehen lassen kann.").font(.title3).foregroundStyle(.secondary)
                     ForEach(features.indices, id: \.self) { index in
                         let item = features[index]
                         ToolLabel(title: item.1, subtitle: item.2, symbol: item.0)
@@ -40,8 +39,8 @@ struct DashboardOverview: View {
                 HStack(spacing: 12) {
                     Image(systemName: "sparkles").foregroundStyle(.cyan)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Willkommen in Version 2.0").font(.subheadline.weight(.semibold))
-                        Text("Neue Werkzeuge findest du unter Einblicke.").font(.caption).foregroundStyle(.secondary)
+                        Text("Willkommen in Version 3.0").font(.subheadline.weight(.semibold))
+                        Text("Neue Punkte, Alltagsbewertungen und Konfetti.").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer(); Image(systemName: "chevron.right").font(.caption)
                 }.padding(16).glassPanel(radius: 22)
@@ -55,7 +54,7 @@ struct DashboardOverview: View {
                     mini("FAVORITEN", String(store.results.filter { $0.favorite == true }.count), "star")
                 }.padding(.horizontal, 4)
             }
-        }.sheet(isPresented: $news) { VersionTwoView() }
+        }.sheet(isPresented: $news) { VersionThreeView() }
     }
     private func mini(_ title: String, _ value: String, _ symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 7) {

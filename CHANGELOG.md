@@ -1,3 +1,15 @@
+# RJ Speedtest 3.0.0
+
+- Neues Ergebnisdesign mit Score-Ring, animiertem Punktezähler und farbigen Bewertungsbalken.
+- RJ Score für Gaming, Streaming, Videoanrufe, Downloads und Uploads (1–10), plus Gesamtscore bis 100.
+- Offen einsehbare Heuristik mit Kurven, Gewichtungen und Einschränkungen; keine Behauptung zusätzlicher Messungen.
+- Kurzes Konfetti nach guten Ergebnissen (ab 75 Punkten) oder Netzrekorden, mit Modi „Gute Tests & Rekorde“, „Nur Netzrekorde“, „Aus“.
+- Bewegungseinstellungen werden beachtet; alte Ergebnisse lösen kein Konfetti aus.
+- Punkte in Verlauf, Einblicken, A/B-Vergleich, Router-Labor und optional im Ergebnisbild.
+- Tacho mit Lichtkontur; bestehende Glättung unverändert. Neue Farben: Jade, Roségold, Elektrisch.
+- Startknopf und Ergebnis vor der Versionsübersicht, neue Version-3-Einführung.
+- Bestehende Daten bleiben kompatibel. GitHub baut die IPA; interne Tests bleiben auf Nutzerwunsch aus.
+
 # RJ Speedtest 2.0.0
 
 Ein großes Funktionsupdate mit neuer Einblicke-Navigation und Werkzeugen für wiederholbare Vergleiche.

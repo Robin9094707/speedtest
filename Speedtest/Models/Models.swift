@@ -143,6 +143,8 @@ struct AppSettings: Codable, Equatable {
     var gaugeScale: GaugeScale = .automatic
     var liveHaptics = true
     var hapticStrength = 0.7
+    var celebrationStyle: CelebrationStyle = .goodTests
+    var dashboardScore = true
     var networkNames: [String: String] = [:]
     var measurementServer: MeasurementServer = .cloudflare
 
@@ -151,7 +153,7 @@ struct AppSettings: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case mode, connections, budgetMB, unit, appearance, accent, haptics, animations
         case locationEnabled, confirmCellular, keepAwake, gaugeScale, liveHaptics, hapticStrength
-        case measurementServer, networkNames
+        case measurementServer, networkNames, celebrationStyle, dashboardScore
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -169,6 +171,8 @@ struct AppSettings: Codable, Equatable {
         gaugeScale = try c.decodeIfPresent(GaugeScale.self, forKey: .gaugeScale) ?? .automatic
         liveHaptics = try c.decodeIfPresent(Bool.self, forKey: .liveHaptics) ?? true
         hapticStrength = min(1, max(0.2, try c.decodeIfPresent(Double.self, forKey: .hapticStrength) ?? 0.7))
+        celebrationStyle = try c.decodeIfPresent(CelebrationStyle.self, forKey: .celebrationStyle) ?? .goodTests
+        dashboardScore = try c.decodeIfPresent(Bool.self, forKey: .dashboardScore) ?? true
         networkNames = try c.decodeIfPresent([String: String].self, forKey: .networkNames) ?? [:]
         measurementServer = try c.decodeIfPresent(MeasurementServer.self, forKey: .measurementServer) ?? .cloudflare
     }

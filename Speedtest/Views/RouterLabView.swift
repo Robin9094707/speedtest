@@ -99,6 +99,9 @@ struct RouterLabView: View {
                 Button { selected = result } label: { ResultRow(result: result, unit: store.settings.unit) }.buttonStyle(.plain)
                 Divider()
             }
+            if let last = sessionResults.last {
+                QualityCard(result: last).id(last.id)
+            }
             if sessionResults.count >= 2, let first = sessionResults.first, let last = sessionResults.last {
                 NavigationLink { ComparisonDetailView(a: first, b: last) } label: {
                     Label("Ersten und letzten Platz vergleichen", systemImage: "arrow.left.arrow.right")
