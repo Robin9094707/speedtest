@@ -2,6 +2,67 @@ import Foundation
 import Combine
 import UIKit
 
+@MainActor
+final class ServerDirectory: ObservableObject {
+    @Published private(set) var servers: [MeasurementServer] = {
+        guard let data = UserDefaults.standard.data(forKey: "libreSpeedDirectory"),
+              let values = try? JSONDecoder().decode([MeasurementServer].self, from: data) else { return [] }
+        return values
+    }()
+    @Published private(set) var loading = false
+    @Published private(set) var message: String?
+    private struct Entry: Decodable {
+        let name: String
+        let server: String
+        let dlURL: String
+        let ulURL: String
+        let pingURL: String
+        var measurementServer: MeasurementServer? {
+            guard var base = URLComponents(string: server.hasPrefix("//") ? "https:" + server : server),
+                  ["http", "https"].contains(base.scheme?.lowercased() ?? ""),
+                  base.host != nil, base.user == nil, base.password == nil else { return nil }
+            base.scheme = "https"
+            if !base.path.hasSuffix("/") { base.path += "/" }
+            guard let url = base.url else { return nil }
+            func endpoint(_ path: String) -> URL? {
+                guard let value = URL(string: path, relativeTo: url)?.absoluteURL,
+                      value.scheme == "https", value.host == url.host, value.port == url.port,
+                      value.user == nil, value.password == nil else { return nil }
+                return value
+            }
+            guard let down = endpoint(dlURL), let up = endpoint(ulURL), let ping = endpoint(pingURL) else { return nil }
+            return MeasurementServer(name: name, downloadURL: down, uploadURL: up, pingURL: ping, libreSpeed: true)
+        }
+    }
+    func refresh() async {
+        guard !loading else { return }
+        loading = true; message = nil
+        defer { loading = false }
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 12
+        config.timeoutIntervalForResource = 15
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        do {
+            let url = URL(string: "https://librespeed.org/backend-servers/servers.php")!
+            let (data, response) = try await session.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                throw MeasurementError.responseError(response as? HTTPURLResponse)
+            }
+            let entries = try JSONDecoder().decode([Entry].self, from: data)
+            var seen = Set<String>()
+            let values = entries.compactMap(\.measurementServer).filter { seen.insert($0.id).inserted }
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            guard !values.isEmpty else { throw MeasurementError.noData }
+            try Task.checkCancellation()
+            servers = values
+            UserDefaults.standard.set(try JSONEncoder().encode(values), forKey: "libreSpeedDirectory")
+        } catch {
+            if !Task.isCancelled { message = "Serverliste konnte nicht geladen werden: \(error.localizedDescription) Gespeicherte Server bleiben auswählbar." }
+        }
+    }
+}
+
 enum TestPhase: String {
     case idle = "Bereit", latency = "Latenz messen", download = "Download", upload = "Upload", complete = "Abgeschlossen", cancelled = "Abgebrochen", failed = "Test fehlgeschlagen"
     var running: Bool { self == .latency || self == .download || self == .upload }
@@ -12,7 +73,8 @@ enum MeasurementError: LocalizedError {
     case retryLater(Int, Double), unexpectedResponse, retryBudget
     var errorDescription: String? {
         switch self {
-        case .server(let status): return "Der Messserver antwortet mit HTTP \(status). Bitte etwas warten und erneut versuchen."
+        case .server(403): return "Dieser Messserver lehnt den Zugriff ab (HTTP 403). Wähle unter „Messserver wechseln“ einen anderen Anbieter. Die genaue Ursache teilt der Server nicht mit."
+        case .server(let status): return "Der Messserver antwortet mit HTTP \(status). Du kannst einen anderen Messserver wählen oder es später erneut versuchen."
         case .retryLater(let status, let delay): return "Der Messserver meldet HTTP \(status). Frühestens in \(ceil(delay).formatted(.number.precision(.fractionLength(0)))) Sekunden erneut versuchen."
         case .unexpectedResponse: return "Die Antwort enthält keine gültigen Testdaten. Prüfe eine mögliche WLAN-Anmeldeseite, einen VPN oder Netzwerkfilter."
         case .retryBudget: return "Für einen neuen Messversuch reicht das verbleibende Datenlimit nicht. Wähle ein höheres Limit oder starte später erneut."
@@ -56,6 +118,7 @@ struct TransferResult: Sendable {
 // cancellation, the deadline timer and continuation completion.
 final class TransferMeter: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let queue = DispatchQueue(label: "de.robinjuhas.speedtest.transfer", qos: .userInitiated)
+    private let server: MeasurementServer
     private let upload: Bool
     private let seconds: Double
     private let streams: Int
@@ -83,8 +146,9 @@ final class TransferMeter: NSObject, URLSessionDataDelegate, @unchecked Sendable
     private var nextDownloadSize = 25_000_000
     private var payload = Data()
 
-    init(upload: Bool, seconds: Double, streams: Int, budget: Int64, cellularAllowed: Bool, sessionProtocols: [AnyClass]? = nil,
+    init(upload: Bool, seconds: Double, streams: Int, budget: Int64, cellularAllowed: Bool, sessionProtocols: [AnyClass]? = nil, server: MeasurementServer = .cloudflare,
          progress: @escaping @Sendable (TransferProgress) -> Void) {
+        self.server = server
         self.upload = upload; self.seconds = seconds; self.streams = streams
         self.budget = budget; self.cellularAllowed = cellularAllowed; self.progress = progress
         self.sessionProtocols = sessionProtocols
@@ -146,13 +210,11 @@ final class TransferMeter: NSObject, URLSessionDataDelegate, @unchecked Sendable
     private func spawn() {
         guard !finished, ProcessInfo.processInfo.systemUptime - start < seconds,
               reserved < budget, let session else { return }
-        let count = Int(min(Int64(upload ? nextUploadSize : nextDownloadSize), budget - reserved))
+        var count = Int(min(Int64(upload ? nextUploadSize : nextDownloadSize), budget - reserved))
+        if !upload && server.libreSpeed { count = (count / 1_048_576) * 1_048_576 }
         guard count > 0 else { return }
         reserved += Int64(count)
-        var components = URLComponents(string: "https://speed.cloudflare.com/\(upload ? "__up" : "__down")")!
-        components.queryItems = [URLQueryItem(name: "r", value: UUID().uuidString)]
-        if !upload { components.queryItems?.append(URLQueryItem(name: "bytes", value: String(count))) }
-        var request = URLRequest(url: components.url!)
+        var request = URLRequest(url: server.requestURL(upload: upload, bytes: count))
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         let task: URLSessionTask
@@ -265,7 +327,16 @@ final class SpeedtestEngine: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var recoveryMessage: String?
     @Published private(set) var gaugeMaximum = 1000.0
-    @Published private(set) var cooldownUntil = UserDefaults.standard.object(forKey: "serverRetryAfter") as? Date
+    @Published private(set) var serverCooldowns: [String: Date] = {
+        var values = UserDefaults.standard.dictionary(forKey: "measurementServerCooldowns") as? [String: Date] ?? [:]
+        if let legacy = UserDefaults.standard.object(forKey: "serverRetryAfter") as? Date {
+            let key = MeasurementServer.cloudflare.id
+            values[key] = max(values[key] ?? .distantPast, legacy)
+        }
+        return values
+    }()
+    private var activeServer: MeasurementServer = .cloudflare
+    func cooldown(for server: MeasurementServer) -> Date? { serverCooldowns[server.id] }
     private var task: Task<Void, Never>?
     private var hapticTask: Task<Void, Never>?
     private var activeAttempt: UUID?
@@ -278,11 +349,12 @@ final class SpeedtestEngine: ObservableObject {
 
     func start(store: AppStore, network: NetworkIdentity, location: LocationService) {
         guard !isRunning else { return }
-        if let until = cooldownUntil, until > Date() {
-            errorMessage = "Der Messserver braucht eine Pause. Bitte warte bis zum Ende des Countdowns."
+        if let until = cooldown(for: store.settings.measurementServer), until > Date() {
+            errorMessage = "Dieser Messserver braucht eine Pause. Du kannst einen anderen Messserver wählen oder den Countdown abwarten."
             return
         }
         let config = store.settings
+        activeServer = config.measurementServer
         selectedScale = config.gaugeScale
         gaugeMaximum = selectedScale.initialMaximum
         recoveryMessage = nil
@@ -315,7 +387,7 @@ final class SpeedtestEngine: ObservableObject {
                     ping: ping ?? 0, jitter: jitter ?? 0, downloadBytes: down.bytes, uploadBytes: up.bytes,
                     duration: Date().timeIntervalSince(started), location: position,
                     downloadSamples: down.samples, uploadSamples: up.samples,
-                    mode: config.mode.rawValue, connections: config.connections, recoveryAttempts: down.retries + up.retries)
+                    server: config.measurementServer.name, mode: config.mode.rawValue, connections: config.connections, recoveryAttempts: down.retries + up.retries)
                 awards = RecordBook.achievements(for: completed, previous: store.results)
                 store.add(completed)
                 result = completed; phase = .complete; liveSpeed = down.mbps; progress = 1
@@ -401,8 +473,8 @@ final class SpeedtestEngine: ObservableObject {
         guard let policy = recoveryPolicy(error, attempt: attempt) else { throw error }
         if error is MeasurementError {
             let until = Date().addingTimeInterval(policy.delay)
-            if cooldownUntil == nil || cooldownUntil! < until { cooldownUntil = until }
-            UserDefaults.standard.set(cooldownUntil, forKey: "serverRetryAfter")
+            serverCooldowns[activeServer.id] = max(serverCooldowns[activeServer.id] ?? .distantPast, until)
+            UserDefaults.standard.set(serverCooldowns, forKey: "measurementServerCooldowns")
         }
         guard attempt < 2, policy.retry, policy.delay <= 12 else { throw error }
         recoveryMessage = "Kurze Unterbrechung · neuer Versuch in \(Int(ceil(policy.delay))) s"
@@ -435,7 +507,7 @@ final class SpeedtestEngine: ObservableObject {
             let offset = priorBytes + failedBytes
             let direction: TestPhase = uploading ? .upload : .download
             let meter = TransferMeter(upload: uploading, seconds: config.mode.seconds,
-                streams: max(1, config.connections / (1 << attempt)), budget: remaining, cellularAllowed: cellularAllowed) { [weak self] update in
+                streams: max(1, config.connections / (1 << attempt)), budget: remaining, cellularAllowed: cellularAllowed, server: config.measurementServer) { [weak self] update in
                     Task { @MainActor in
                         guard let self, self.activeAttempt == attemptID else { return }
                         self.receive(update, id: id, phase: direction, duration: config.mode.seconds, priorBytes: offset)
@@ -498,15 +570,16 @@ final class SpeedtestEngine: ObservableObject {
         var values: [Double] = []
         for index in 0..<7 {
             try Task.checkCancellation()
-            let url = URL(string: "https://speed.cloudflare.com/__down?bytes=0&r=\(UUID().uuidString)")!
+            let url = activeServer.requestURL(ping: true)
             var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
             request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
             let started = ProcessInfo.processInfo.systemUptime
-            let (_, response) = try await session.data(for: request)
+            let (body, response) = try await session.data(for: request)
             let elapsed = (ProcessInfo.processInfo.systemUptime - started) * 1000
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard (200..<300).contains(status) else { throw MeasurementError.responseError(response as? HTTPURLResponse) }
-            guard response.url?.host == "speed.cloudflare.com", response.mimeType?.lowercased() != "text/html" else { throw MeasurementError.unexpectedResponse }
+            guard response.url?.host == url.host, response.url?.path == url.path,
+                  body.isEmpty || response.mimeType?.lowercased() != "text/html" else { throw MeasurementError.unexpectedResponse }
             if index > 0 { values.append(elapsed) }
             progress = Double(index + 1) / 7 * 0.1
         }

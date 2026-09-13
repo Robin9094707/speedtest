@@ -74,7 +74,7 @@ struct WelcomeView: View {
                 Label("Deine Orte, Notizen und Netz-Rekorde", systemImage: "map")
                 Text("Für die Karte fragt die App gleich nach deinem Standort. Die Freigabe ist freiwillig. Verlauf und Orte bleiben auf deinem Gerät.")
                     .font(.subheadline).foregroundStyle(.secondary)
-                Text("Ein Test überträgt echte Daten an Cloudflare. Standardmäßig bis zu etwa 1 GB Nutzdaten pro Test; das Limit kannst du ändern. Der Anbieter sieht dabei deine IP-Adresse.")
+                Text("Ein Test überträgt echte Daten an den gewählten Messanbieter. Standardmäßig bis zu etwa 1 GB Nutzdaten pro Test; das Limit kannst du ändern. Der Anbieter sieht dabei deine IP-Adresse.")
                     .font(.footnote).foregroundStyle(.secondary)
                 Spacer()
                 Button(action: onContinue) {

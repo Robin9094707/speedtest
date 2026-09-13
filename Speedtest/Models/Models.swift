@@ -95,6 +95,33 @@ enum GaugeScale: Int, Codable, CaseIterable, Identifiable {
     var label: String { self == .automatic ? "Automatisch (ab 1.000)" : "\(rawValue) Mbit/s" }
 }
 
+struct MeasurementServer: Codable, Equatable, Identifiable, Sendable {
+    var name: String
+    var downloadURL: URL
+    var uploadURL: URL
+    var pingURL: URL
+    var libreSpeed: Bool
+    // Share cooldowns across paths belonging to the same server.
+    var id: String { downloadURL.host?.lowercased() ?? downloadURL.absoluteString }
+    static let cloudflare = MeasurementServer(name: "Cloudflare Edge",
+        downloadURL: URL(string: "https://speed.cloudflare.com/__down")!,
+        uploadURL: URL(string: "https://speed.cloudflare.com/__up")!,
+        pingURL: URL(string: "https://speed.cloudflare.com/__down")!, libreSpeed: false)
+
+    func requestURL(upload: Bool = false, ping: Bool = false, bytes: Int = 0) -> URL {
+        var parts = URLComponents(url: ping ? pingURL : upload ? uploadURL : downloadURL, resolvingAgainstBaseURL: false)!
+        var query = parts.queryItems ?? []
+        query.removeAll { ["r", "bytes", "ckSize"].contains($0.name) }
+        query.append(URLQueryItem(name: "r", value: UUID().uuidString))
+        if !upload && (!ping || !libreSpeed) {
+            query.append(URLQueryItem(name: libreSpeed ? "ckSize" : "bytes",
+                                      value: String(libreSpeed ? bytes / 1_048_576 : bytes)))
+        }
+        parts.queryItems = query
+        return parts.url!
+    }
+}
+
 struct AppSettings: Codable, Equatable {
     var mode: TestMode = .balanced
     var connections = 4
@@ -110,12 +137,14 @@ struct AppSettings: Codable, Equatable {
     var gaugeScale: GaugeScale = .automatic
     var liveHaptics = true
     var hapticStrength = 0.7
+    var measurementServer: MeasurementServer = .cloudflare
 
     init() {}
     // New preferences must not invalidate settings or history from earlier IPAs.
     private enum CodingKeys: String, CodingKey {
         case mode, connections, budgetMB, unit, appearance, accent, haptics, animations
         case locationEnabled, confirmCellular, keepAwake, gaugeScale, liveHaptics, hapticStrength
+        case measurementServer
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -133,6 +162,7 @@ struct AppSettings: Codable, Equatable {
         gaugeScale = try c.decodeIfPresent(GaugeScale.self, forKey: .gaugeScale) ?? .automatic
         liveHaptics = try c.decodeIfPresent(Bool.self, forKey: .liveHaptics) ?? true
         hapticStrength = min(1, max(0.2, try c.decodeIfPresent(Double.self, forKey: .hapticStrength) ?? 0.7))
+        measurementServer = try c.decodeIfPresent(MeasurementServer.self, forKey: .measurementServer) ?? .cloudflare
     }
 }
 

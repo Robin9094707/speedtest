@@ -10,6 +10,7 @@ struct DashboardView: View {
     @State private var cellularPrompt = false
     @State private var selectedResult: SpeedResult?
     @State private var showNetworkEditor = false
+    @State private var showServers = false
     private var maximum: Double {
         store.settings.gaugeScale == .automatic
             ? max(engine.gaugeMaximum, SpeedMath.gaugeMaximum(engine.liveSpeed))
@@ -46,6 +47,17 @@ struct DashboardView: View {
                         }.glassPanel(radius: 32)
 
                         startControl
+                        Button { showServers = true } label: {
+                            HStack {
+                                Image(systemName: "server.rack")
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(store.settings.measurementServer.name).font(.subheadline.weight(.semibold))
+                                    Text("Messserver wechseln").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.down").font(.caption)
+                            }.padding(16).glassPanel(radius: 22)
+                        }.buttonStyle(.plain).disabled(engine.isRunning)
 
                         if !network.connected {
                             Label("Keine Internetverbindung", systemImage: "wifi.slash").font(.subheadline).foregroundStyle(.orange)
@@ -91,7 +103,7 @@ struct DashboardView: View {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "globe.europe.africa").foregroundStyle(accent)
                             VStack(alignment: .leading, spacing: 5) {
-                                Text("Cloudflare Edge").font(.subheadline.weight(.semibold))
+                                Text(engine.result?.server ?? store.settings.measurementServer.name).font(.subheadline.weight(.semibold))
                                 Text("Download → Upload · bis ca. \(store.settings.budgetMB) MB Nutzdaten pro Test. Geschwindigkeit und Datenverbrauch sind echte Messwerte.")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
@@ -100,6 +112,7 @@ struct DashboardView: View {
                 }.scrollIndicators(.hidden)
             }
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showServers) { ServerSelectionView() }
             .sheet(item: $selectedResult) { ResultDetailView(resultID: $0.id) }
             .sheet(isPresented: $showNetworkEditor) {
                 NavigationStack {
@@ -122,7 +135,7 @@ struct DashboardView: View {
 
     private var startControl: some View {
         TimelineView(.periodic(from: .now, by: 1)) { clock in
-            let remaining = max(0, ceil(engine.cooldownUntil?.timeIntervalSince(clock.date) ?? 0))
+            let remaining = max(0, ceil(engine.cooldown(for: store.settings.measurementServer)?.timeIntervalSince(clock.date) ?? 0))
             let pauseLabel = remaining > 86_400 ? "Serverpause · mehr als 24 Std." : "Serverpause · \(Int(min(86_400, remaining))) s"
             Button {
                 if engine.isRunning { engine.cancel() }

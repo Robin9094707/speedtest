@@ -1,5 +1,71 @@
 import SwiftUI
 
+struct ServerSelectionView: View {
+    @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var engine: SpeedtestEngine
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var directory = ServerDirectory()
+    @State private var search = ""
+    private var choices: [MeasurementServer] {
+        var all = [MeasurementServer.cloudflare]
+        let selected = store.settings.measurementServer
+        if selected.id != MeasurementServer.cloudflare.id { all.append(selected) }
+        all += directory.servers.filter { server in !all.contains { $0.id == server.id } }
+        return all.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.id.localizedCaseInsensitiveContains(search) }
+    }
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("Wähle möglichst einen Server in deiner Nähe. Bei HTTP 403 oder einer Serverpause kannst du hier einen anderen Anbieter auswählen.")
+                    Text("Die Betreiber erhalten deine IP-Adresse. Standorte, Notizen und gespeicherte Ergebnisse werden nicht übertragen. Andere Server können andere Geschwindigkeiten ergeben.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button {
+                        Task { await directory.refresh() }
+                    } label: {
+                        HStack {
+                            Label("Öffentliche Server laden", systemImage: "arrow.clockwise")
+                            Spacer()
+                            if directory.loading { ProgressView() }
+                        }
+                    }.disabled(directory.loading)
+                    if let message = directory.message { Text(message).font(.caption).foregroundStyle(.orange) }
+                } footer: {
+                    Text("Liste von LibreSpeed · ausschließlich HTTPS. Manche gelisteten Server unterstützen HTTPS möglicherweise nicht. Es werden keine Geschwindigkeitstests im Hintergrund gestartet.")
+                }
+                Section("Messserver") {
+                    ForEach(choices) { server in
+                        Button {
+                            guard !engine.isRunning else { return }
+                            store.settings.measurementServer = server
+                            engine.errorMessage = nil
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(server.name).foregroundStyle(.primary)
+                                    Text(server.id).font(.caption).foregroundStyle(.secondary)
+                                    if let until = engine.cooldown(for: server), until > Date() {
+                                        Text("Pause bis \(until.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption).foregroundStyle(.orange)
+                                    }
+                                }
+                                Spacer()
+                                if server.id == store.settings.measurementServer.id {
+                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint)
+                                }
+                            }
+                        }.disabled(engine.isRunning)
+                    }
+                }
+            }
+            .navigationTitle("Messserver")
+            .searchable(text: $search, prompt: "Ort oder Anbieter suchen")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Fertig") { dismiss() } } }
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var engine: SpeedtestEngine
@@ -27,6 +93,14 @@ struct SettingsView: View {
                 } header: { Text("Messung") } footer: {
                     Text("Ein Test misst erst Download, dann Upload. Je Richtung gilt die halbe Datenmenge. Bei Erreichen des Limits endet die Phase früher. 1 GB entspricht hier 1.024 MB Nutzdaten; Protokolldaten kommen hinzu. Mehrere Verbindungen können schnelle Anschlüsse besser auslasten.")
                 }.disabled(engine.isRunning)
+
+                Section("Messserver") {
+                    NavigationLink { ServerSelectionView() } label: {
+                        LabeledContent("Server wechseln", value: store.settings.measurementServer.name)
+                    }.disabled(engine.isRunning)
+                    Text("Bei einer Ablehnung oder Pause kannst du einen anderen Anbieter auswählen. Ein Test nutzt durchgehend denselben Server.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
 
                 Section("Dein Look") {
                     Picker("Einheit", selection: $store.settings.unit) { ForEach(SpeedUnit.allCases) { Text($0.rawValue).tag($0) } }
@@ -65,7 +139,7 @@ struct SettingsView: View {
                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                     }
                 } header: { Text("Standort & Datenschutz") } footer: {
-                    Text("Standorte, Notizen und Netzprofile werden nur auf diesem Gerät gespeichert. Es gibt kein Konto, keine Werbung und kein Tracking-SDK. Messanfragen gehen an Cloudflare; Karten werden von Apple bereitgestellt. Diese Dienste erhalten technisch erforderliche Verbindungsdaten. Standort ausschalten entfernt keine früher gespeicherten Orte.")
+                    Text("Standorte, Notizen und Netzprofile werden nur auf diesem Gerät gespeichert. Es gibt kein Konto, keine Werbung und kein Tracking-SDK. Messanfragen gehen an den gewählten Anbieter; die Serverliste kommt von LibreSpeed; Karten werden von Apple bereitgestellt. Diese Dienste erhalten technisch erforderliche Verbindungsdaten. Standort ausschalten entfernt keine früher gespeicherten Orte.")
                 }
 
                 Section {
@@ -82,6 +156,7 @@ struct SettingsView: View {
                     LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"))")
                     LabeledContent("Entwickelt für", value: "Robin Juhas")
                     Link("Quellcode & Builds", destination: URL(string: "https://github.com/Robin9094707/speedtest")!)
+                    Link("LibreSpeed & Serververzeichnis", destination: URL(string: "https://github.com/librespeed/speedtest-cli")!)
                     Link("Cloudflare-Messendpunkte", destination: URL(string: "https://github.com/cloudflare/speedtest")!)
                     Link("Cloudflare-Datenschutz", destination: URL(string: "https://www.cloudflare.com/privacypolicy/")!)
                     Text("Natives Liquid Glass unter iOS 26 oder neuer; Material-Oberfläche unter iOS 17–18. Die Skala wächst automatisch über 1.000 Mbit/s hinaus. HTTP-Ping ist keine ICMP-Messung. Öffentliche Messendpunkte haben keine Verfügbarkeitsgarantie.")

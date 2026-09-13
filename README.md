@@ -33,13 +33,13 @@ Eine native, deutschsprachige SwiftUI-App für Robin Juhas. Großer Glastacho, e
 
 ## Messverfahren und Grenzen
 
-Die App verwendet direkt die im offiziellen [Cloudflare-Speedtest-Projekt](https://github.com/cloudflare/speedtest) dokumentierten öffentlichen HTTPS-Endpunkte `https://speed.cloudflare.com/__down?bytes=…` und `https://speed.cloudflare.com/__up`. Kein API-Key, eigenes Server-Abo oder JavaScript-SDK erforderlich. Dies ist eine unabhängige App und keine offizielle Cloudflare-App. Öffentliche Endpunkte können sich ändern, zeitweilig begrenzen oder ausfallen.
+Als voreingestellten Anbieter verwendet die App die im offiziellen [Cloudflare-Speedtest-Projekt](https://github.com/cloudflare/speedtest) dokumentierten öffentlichen HTTPS-Endpunkte `https://speed.cloudflare.com/__down?bytes=…` und `https://speed.cloudflare.com/__up`. Kein API-Key, eigenes Server-Abo oder JavaScript-SDK erforderlich. Dies ist eine unabhängige App und keine offizielle Cloudflare-App. Öffentliche Endpunkte können sich ändern, zeitweilig begrenzen oder ausfallen.
 
 Download-Daten werden per `URLSessionDataDelegate` gezählt und sofort verworfen. Uploads enthalten ausschließlich neu erzeugte zufällige Bytes, niemals lokale Dateien. Die Uploadrate zählt erfolgreich per HTTP bestätigte Nutzdaten. Die Chunkgröße passt sich an die Verbindung an. Deshalb können kleine Live-Intervalle beim Upload sprunghaft sein; das Ergebnis verwendet den zeitlichen Durchschnitt bestätigter Transfers, nicht die höchste Nadelspitze. Kurze, am Phasenende noch nicht bestätigte Uploads zählen zum übertragenen Volumen, aber nicht zur finalen Bandbreite.
 
 Die ersten ungefähr 0,8 Sekunden einer Lastphase werden nach Möglichkeit als Anlaufphase aus dem Mittelwert ausgeklammert. Bei sehr früh erreichtem Datenbudget wird die gesamte kurze Phase verwendet. Kleine Budgets können schnelle Verbindungen deshalb unterschätzen. Für schnelle 5G-/Gigabitanschlüsse ist ein längerer Test mit ausreichend Datenbudget sinnvoll.
 
-Latenz ist der Median von sechs kleinen HTTPS-Roundtrips nach einer nicht gewerteten Aufwärmanfrage, einschließlich Serververarbeitung und ohne Abzug von `Server-Timing`. Jitter ist die mittlere absolute Differenz aufeinanderfolgender Roundtrips. **Kein ICMP-Ping, keine Paketverlustmessung und kein Ookla-Zertifikat.** WLAN, Router, VPN, Mobilfunkzelle, der verwendete HTTP-Transport und der Cloudflare-Standort beeinflussen die Ergebnisse.
+Latenz ist der Median von sechs kleinen HTTPS-Roundtrips nach einer nicht gewerteten Aufwärmanfrage, einschließlich Serververarbeitung und ohne Abzug von `Server-Timing`. Jitter ist die mittlere absolute Differenz aufeinanderfolgender Roundtrips. **Kein ICMP-Ping, keine Paketverlustmessung und kein Ookla-Zertifikat.** WLAN, Router, VPN, Mobilfunkzelle, der verwendete HTTP-Transport und der gewählte Messserver beeinflussen die Ergebnisse.
 
 Jede Richtung erhält die Hälfte des Nutzdatenbudgets. Das angezeigte „1 GB“-Profil reserviert insgesamt maximal 1.024.000.000 Transferbytes; HTTPS-/TCP-/IP-Overhead und kleine Latenzanfragen sind zusätzlich möglich. Eine Phase endet nach ihrer Testdauer oder beim Erreichen ihres Budgets. Abbruch, Hintergrundwechsel, erkannter Netzwechsel und HTTP-Fehler erzeugen **keinen gespeicherten vollständigen Test**. WLAN-Tests erlauben keinen stillen Mobilfunk-Fallback.
 
@@ -55,7 +55,7 @@ iOS stellt den WLAN-Namen nur unter bestimmten Berechtigungs- und Signierungsbed
 
 ## Datenschutz
 
-Historie, Koordinaten und Notizen bleiben im geschützten App-Verzeichnis. Keine eigene Cloud-Synchronisierung. Betriebssystem-Backups können App-Daten entsprechend deinen iOS-Einstellungen enthalten. Für Messanfragen sieht Cloudflare die technisch notwendige IP-Adresse und Verbindungsinformationen. Karten verwenden Apple MapKit. Standort und Notizen werden nicht an den Speedtest-Endpunkt gesendet. Exporte enthalten gespeicherte Orte und sind entsprechend bewusst zu teilen.
+Historie, Koordinaten und Notizen bleiben im geschützten App-Verzeichnis. Keine eigene Cloud-Synchronisierung. Betriebssystem-Backups können App-Daten entsprechend deinen iOS-Einstellungen enthalten. Für Messanfragen sieht der gewählte Messanbieter die technisch notwendige IP-Adresse und Verbindungsinformationen. Karten verwenden Apple MapKit. Standort und Notizen werden nicht an den Speedtest-Endpunkt gesendet. Exporte enthalten gespeicherte Orte und sind entsprechend bewusst zu teilen.
 
 Der Standort ist optional. Ohne Freigabe bzw. ohne aktuelle Position gibt es ein vollständiges Messergebnis ohne Kartenpin. Es werden keine Hintergrundstandorte erfasst. [Cloudflare-Datenschutz](https://www.cloudflare.com/privacypolicy/).
 
@@ -95,3 +95,11 @@ UITests/               App-Start, Navigation und Screenshots
 scripts/               Reproduzierbare Projekt-/Icon-Erstellung, IPA-Prüfung
 .github/workflows/     Automatischer Xcode-Test und IPA-Build
 ```
+
+## Serverauswahl und HTTP 403
+
+Unter dem Startknopf und in den Einstellungen lässt sich der Messserver wechseln. Die App lädt auf Wunsch das öffentliche Verzeichnis, das auch der offizielle [LibreSpeed-CLI](https://github.com/librespeed/speedtest-cli/blob/master/speedtest/speedtest.go) nutzt: `https://librespeed.org/backend-servers/servers.php`. Die Liste wird lokal zwischengespeichert. Auswahl und frühere Ergebnisse bleiben bei Updates erhalten. Es gibt keine automatische Serverrotation und keinen Anbieterwechsel mitten in einer Messung.
+
+LibreSpeed-Downloads verwenden `ckSize` (MiB-Chunks beim PHP-Backend), Upload und HTTP-Ping die im Verzeichnis angegebenen Endpunkte. Alle Verbindungen verwenden HTTPS und die normale iOS-Zertifikatsprüfung. Der gewählte Betreiber sieht die für Verbindungen nötigen Daten; die Verzeichnisabfrage geht an LibreSpeed. Standort, Notizen und Ergebnis-Telemetrie werden nicht an diese Dienste gesendet. Download und Upload eines Tests verwenden denselben Server; dessen Name wird im Ergebnis gespeichert. Andere Standorte und Betreiber können andere Messwerte ergeben.
+
+HTTP 403 bedeutet Zugriffsablehnung, ohne die Ursache zu beweisen. Die App versucht solche Ablehnungen nicht automatisch erneut. Eine `Retry-After`-Pause gilt nur für den jeweiligen Serverhost, auch nach einem Neustart. Die frühere globale Cloudflare-Pause wird dem Cloudflare-Host zugeordnet. Andere Anbieter bleiben manuell auswählbar. Bei fehlendem HTTPS, Wartung oder Überlastung kann auch ein Verzeichniseintrag scheitern; öffentliche Server garantieren weder dauerhafte Verfügbarkeit noch unbegrenzt viele Tests.
